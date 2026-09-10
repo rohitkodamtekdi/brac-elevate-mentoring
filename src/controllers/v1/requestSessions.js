@@ -45,7 +45,7 @@ module.exports = class requestsSessions {
 				req.query.status ? req.query.status.split(',').map((s) => s.trim()) : [],
 				req.decodedToken.tenant_code,
 				req.query.onlyRequested,
-				req.query.support_offering_type
+				req.query
 			)
 			return requestSessionDetails
 		} catch (error) {

@@ -184,11 +184,14 @@ module.exports = class requestSessionsHelper {
 			let requestSessionModel = await sessionRequestQueries.getColumns()
 			bodyData = utils.restructureBody(bodyData, validationData, requestSessionModel)
 
-			// `support_offering_type` (training_session / additional_service / asset) is not a dynamic
-			// entity type, so restructureBody won't carry it into meta on its own - persist it explicitly
-			// so the list API can later filter requests by offering type.
-			if (bodyData.support_offering_type) {
-				bodyData.meta = { ...(bodyData.meta || {}), support_offering_type: bodyData.support_offering_type }
+			// Dynamically persist any entity types or custom fields (e.g. support_offering_type, idp_task, province, site)
+			// into meta if they are not standard columns in request_session table
+			const modelColumns = new Set(requestSessionModel)
+			bodyData.meta = bodyData.meta || {}
+			for (const key of Object.keys(bodyData)) {
+				if (!modelColumns.has(key) && key !== 'meta' && key !== 'custom_entity_text') {
+					bodyData.meta[key] = bodyData[key]
+				}
 			}
 
 			// Create a new session request
@@ -242,7 +245,7 @@ module.exports = class requestSessionsHelper {
 	 * @param {number} pageSize - The number of records per page.
 	 * @returns {Promise<Object>} The list of pending session requests.
 	 */
-	static async list(userId, pageNo, pageSize, status, tenantCode, onlyRequested = false, supportOfferingType = null) {
+	static async list(userId, pageNo, pageSize, status, tenantCode, onlyRequested = false, query = {}) {
 		try {
 			// Get requests sent by me (requestor_id = userId)
 			const allRequestSession = await sessionRequestQueries.getAllRequests(userId, status, tenantCode)
@@ -261,13 +264,40 @@ module.exports = class requestSessionsHelper {
 				combinedData = sessionRequestData
 			}
 
-			// Filter by offering type (training_session / additional_service / asset).
-			// The type is stored inside meta (see create()); requests created before that existed
-			// don't have it set, so treat those as plain training sessions.
-			if (supportOfferingType) {
+			// Dynamically filter by entity types or metadata parameters passed in query (e.g., idp_task, province, site, support_offering_type, etc.)
+			const reservedParams = new Set([
+				'pageNo',
+				'pageSize',
+				'status',
+				'onlyRequested',
+				'SkipValidation',
+				'searchText',
+			])
+			const filterKeys = Object.keys(query).filter(
+				(key) => !reservedParams.has(key) && query[key] !== undefined && query[key] !== ''
+			)
+
+			if (filterKeys.length > 0) {
 				combinedData = combinedData.filter((session) => {
-					const sessionOfferingType = session?.meta?.support_offering_type || 'training_session'
-					return sessionOfferingType === supportOfferingType
+					return filterKeys.every((key) => {
+						const targetVal = query[key]
+						let sessionVal = session?.meta?.[key] ?? session?.[key]
+
+						// Fallback for legacy support_offering_type if not explicitly set in meta
+						if (key === 'support_offering_type' && sessionVal === undefined) {
+							sessionVal = 'training_session'
+						}
+
+						if (sessionVal === undefined || sessionVal === null) {
+							return false
+						}
+
+						if (Array.isArray(sessionVal)) {
+							return sessionVal.includes(targetVal) || sessionVal.map(String).includes(String(targetVal))
+						}
+
+						return String(sessionVal).toLowerCase() === String(targetVal).toLowerCase()
+					})
 				})
 			}
 
