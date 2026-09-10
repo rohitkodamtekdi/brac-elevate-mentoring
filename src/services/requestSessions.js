@@ -184,6 +184,13 @@ module.exports = class requestSessionsHelper {
 			let requestSessionModel = await sessionRequestQueries.getColumns()
 			bodyData = utils.restructureBody(bodyData, validationData, requestSessionModel)
 
+			// `support_offering_type` (training_session / additional_service / asset) is not a dynamic
+			// entity type, so restructureBody won't carry it into meta on its own - persist it explicitly
+			// so the list API can later filter requests by offering type.
+			if (bodyData.support_offering_type) {
+				bodyData.meta = { ...(bodyData.meta || {}), support_offering_type: bodyData.support_offering_type }
+			}
+
 			// Create a new session request
 			const SessionRequestResult = await sessionRequestQueries.addSessionRequest(
 				userId,
@@ -235,7 +242,7 @@ module.exports = class requestSessionsHelper {
 	 * @param {number} pageSize - The number of records per page.
 	 * @returns {Promise<Object>} The list of pending session requests.
 	 */
-	static async list(userId, pageNo, pageSize, status, tenantCode, onlyRequested = false) {
+	static async list(userId, pageNo, pageSize, status, tenantCode, onlyRequested = false, supportOfferingType = null) {
 		try {
 			// Get requests sent by me (requestor_id = userId)
 			const allRequestSession = await sessionRequestQueries.getAllRequests(userId, status, tenantCode)
@@ -253,6 +260,17 @@ module.exports = class requestSessionsHelper {
 			} else {
 				combinedData = sessionRequestData
 			}
+
+			// Filter by offering type (training_session / additional_service / asset).
+			// The type is stored inside meta (see create()); requests created before that existed
+			// don't have it set, so treat those as plain training sessions.
+			if (supportOfferingType) {
+				combinedData = combinedData.filter((session) => {
+					const sessionOfferingType = session?.meta?.support_offering_type || 'training_session'
+					return sessionOfferingType === supportOfferingType
+				})
+			}
+
 			// Sort combined data by created_at in descending order (most recent first)
 			combinedData.sort((a, b) => {
 				const dateA = new Date(a.created_at)
@@ -328,6 +346,17 @@ module.exports = class requestSessionsHelper {
 								...session,
 								id: String(session.id),
 								user_details: user,
+								request_type: isSent ? 'sent' : 'received',
+							}
+						}
+						// Additional service / asset requests aren't addressed to a specific mentor
+						// (requestee_id is empty), so there's no "opposite user" to resolve - keep the
+						// request instead of silently dropping it.
+						if (!oppositeUserId) {
+							return {
+								...session,
+								id: String(session.id),
+								user_details: null,
 								request_type: isSent ? 'sent' : 'received',
 							}
 						}
