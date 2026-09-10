@@ -278,27 +278,18 @@ module.exports = class requestSessionsHelper {
 			)
 
 			if (filterKeys.length > 0) {
-				combinedData = combinedData.filter((session) => {
-					return filterKeys.every((key) => {
-						const targetVal = query[key]
-						let sessionVal = session?.meta?.[key] ?? session?.[key]
-
-						// Fallback for legacy support_offering_type if not explicitly set in meta
-						if (key === 'support_offering_type' && sessionVal === undefined) {
-							sessionVal = 'training_session'
-						}
-
-						if (sessionVal === undefined || sessionVal === null) {
-							return false
-						}
-
-						if (Array.isArray(sessionVal)) {
-							return sessionVal.includes(targetVal) || sessionVal.map(String).includes(String(targetVal))
-						}
-
-						return String(sessionVal).toLowerCase() === String(targetVal).toLowerCase()
+				combinedData = combinedData.filter((session) =>
+					filterKeys.every((key) => {
+						const val =
+							session?.meta?.[key] ??
+							session?.[key] ??
+							(key === 'support_offering_type' ? 'training_session' : null)
+						if (val === null || val === undefined) return false
+						return Array.isArray(val)
+							? val.includes(query[key])
+							: String(val).toLowerCase() === String(query[key]).toLowerCase()
 					})
-				})
+				)
 			}
 
 			// Sort combined data by created_at in descending order (most recent first)
