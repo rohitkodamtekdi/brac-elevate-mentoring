@@ -184,6 +184,10 @@ module.exports = class requestSessionsHelper {
 			let requestSessionModel = await sessionRequestQueries.getColumns()
 			bodyData = utils.restructureBody(bodyData, validationData, requestSessionModel)
 
+			if (bodyData.support_offering_type) {
+				bodyData.meta = { ...(bodyData.meta || {}), support_offering_type: bodyData.support_offering_type }
+			}
+
 			// Create a new session request
 			const SessionRequestResult = await sessionRequestQueries.addSessionRequest(
 				userId,
@@ -270,10 +274,7 @@ module.exports = class requestSessionsHelper {
 			if (filterKeys.length > 0) {
 				combinedData = combinedData.filter((session) =>
 					filterKeys.every((key) => {
-						const val =
-							session?.meta?.[key] ??
-							session?.[key] ??
-							(key === 'support_offering_type' ? 'training_session' : null)
+						const val = session?.meta?.[key] ?? session?.[key]
 						if (val === null || val === undefined) return false
 						return Array.isArray(val)
 							? val.includes(query[key])
