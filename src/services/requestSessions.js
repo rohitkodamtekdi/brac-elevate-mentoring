@@ -184,14 +184,11 @@ module.exports = class requestSessionsHelper {
 			let requestSessionModel = await sessionRequestQueries.getColumns()
 			bodyData = utils.restructureBody(bodyData, validationData, requestSessionModel)
 
-			// Dynamically persist any entity types or custom fields (e.g. support_offering_type, idp_task, province, site)
-			// into meta if they are not standard columns in request_session table
-			const modelColumns = new Set(requestSessionModel)
-			bodyData.meta = bodyData.meta || {}
-			for (const key of Object.keys(bodyData)) {
-				if (!modelColumns.has(key) && key !== 'meta' && key !== 'custom_entity_text') {
-					bodyData.meta[key] = bodyData[key]
-				}
+			// Persist support_offering_type in meta and normalize 'training' -> 'training_session'
+			if (bodyData.support_offering_type) {
+				let offeringType =
+					bodyData.support_offering_type === 'training' ? 'training_session' : bodyData.support_offering_type
+				bodyData.meta = { ...(bodyData.meta || {}), support_offering_type: offeringType }
 			}
 
 			// Create a new session request
@@ -280,14 +277,22 @@ module.exports = class requestSessionsHelper {
 			if (filterKeys.length > 0) {
 				combinedData = combinedData.filter((session) =>
 					filterKeys.every((key) => {
-						const val =
-							session?.meta?.[key] ??
-							session?.[key] ??
-							(key === 'support_offering_type' ? 'training_session' : null)
-						if (val === null || val === undefined) return false
-						return Array.isArray(val)
-							? val.includes(query[key])
-							: String(val).toLowerCase() === String(query[key]).toLowerCase()
+						let targetVal = query[key]
+						let sessionVal = session?.meta?.[key] ?? session?.[key]
+
+						if (key === 'support_offering_type') {
+							if (sessionVal === 'training' || sessionVal === undefined || sessionVal === null) {
+								sessionVal = 'training_session'
+							}
+							if (targetVal === 'training') {
+								targetVal = 'training_session'
+							}
+						}
+
+						if (sessionVal === null || sessionVal === undefined) return false
+						return Array.isArray(sessionVal)
+							? sessionVal.includes(targetVal)
+							: String(sessionVal).toLowerCase() === String(targetVal).toLowerCase()
 					})
 				)
 			}
@@ -370,9 +375,6 @@ module.exports = class requestSessionsHelper {
 								request_type: isSent ? 'sent' : 'received',
 							}
 						}
-						// Additional service / asset requests aren't addressed to a specific mentor
-						// (requestee_id is empty), so there's no "opposite user" to resolve - keep the
-						// request instead of silently dropping it.
 						if (!oppositeUserId) {
 							return {
 								...session,
