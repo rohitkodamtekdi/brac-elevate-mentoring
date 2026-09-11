@@ -254,7 +254,7 @@ module.exports = class requestSessionsHelper {
 				combinedData = sessionRequestData
 			}
 
-			// Dynamically filter by entity types or metadata parameters passed in query (e.g., idp_task, province, site, support_offering_type, etc.)
+			// Dynamically filter by entity types or metadata parameters passed in query
 			const reservedParams = new Set([
 				'pageNo',
 				'pageSize',
