@@ -271,7 +271,6 @@ module.exports = class requestSessionsHelper {
 				combinedData = combinedData.filter((session) =>
 					filterKeys.every((key) => {
 						const val = session?.meta?.[key] ?? session?.[key]
-						if (val === null || val === undefined) return false
 						return Array.isArray(val)
 							? val.includes(query[key])
 							: String(val).toLowerCase() === String(query[key]).toLowerCase()
