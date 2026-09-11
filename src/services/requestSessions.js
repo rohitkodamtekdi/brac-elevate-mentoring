@@ -184,10 +184,6 @@ module.exports = class requestSessionsHelper {
 			let requestSessionModel = await sessionRequestQueries.getColumns()
 			bodyData = utils.restructureBody(bodyData, validationData, requestSessionModel)
 
-			if (bodyData.support_offering_type) {
-				bodyData.meta = { ...(bodyData.meta || {}), support_offering_type: bodyData.support_offering_type }
-			}
-
 			// Create a new session request
 			const SessionRequestResult = await sessionRequestQueries.addSessionRequest(
 				userId,
