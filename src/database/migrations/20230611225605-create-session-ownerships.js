@@ -13,6 +13,10 @@ module.exports = {
 				allowNull: false,
 				primaryKey: true,
 			},
+			user_id: {
+				type: Sequelize.INTEGER,
+				allowNull: false,
+			},
 			session_id: {
 				type: Sequelize.INTEGER,
 				allowNull: false,
