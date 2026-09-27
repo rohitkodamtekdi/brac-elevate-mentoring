@@ -134,6 +134,10 @@ module.exports = {
 			deleted_at: {
 				type: Sequelize.DATE,
 			},
+			tenant_code: {
+				type: Sequelize.STRING,
+				allowNull: false,
+			},
 		})
 	},
 

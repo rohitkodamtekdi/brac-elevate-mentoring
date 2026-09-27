@@ -31,10 +31,18 @@ module.exports = {
 			data_type: {
 				type: Sequelize.STRING,
 			},
+			tenant_code: {
+				type: Sequelize.STRING,
+				allowNull: true,
+			},
 			org_id: {
 				type: Sequelize.STRING,
 				primaryKey: true,
 				allowNull: false,
+			},
+			organization_code: {
+				type: Sequelize.STRING,
+				allowNull: true,
 			},
 			parent_id: {
 				type: Sequelize.INTEGER,
