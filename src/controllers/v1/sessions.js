@@ -87,7 +87,8 @@ module.exports = class Sessions {
 				req.query,
 				req.decodedToken.roles,
 				req.decodedToken.organization_code,
-				req.decodedToken ? req.decodedToken.tenant_code : ''
+				req.decodedToken ? req.decodedToken.tenant_code : '',
+				req.decodedToken ? req.decodedToken.organization_id : ''
 			)
 			return sessionDetails
 		} catch (error) {

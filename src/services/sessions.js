@@ -1455,10 +1455,20 @@ module.exports = class SessionsHelper {
 	 * @param {String} id 						- Session id.
 	 * @param {Number} userId 					- User id.
 	 * @param {Boolean} isAMentor 				- user mentor or not.
+	 * @param {String} organizationId 			- User organization id.
 	 * @returns {JSON} 							- Session details
 	 */
 
-	static async details(id, userId = '', isAMentor = '', queryParams, roles, orgCode, tenantCode) {
+	static async details(
+		id,
+		userId = '',
+		isAMentor = '',
+		queryParams,
+		roles,
+		orgCode,
+		tenantCode,
+		organizationId = ''
+	) {
 		try {
 			let filter = {}
 			if (utils.isNumeric(id)) {
@@ -1568,7 +1578,9 @@ module.exports = class SessionsHelper {
 					}
 
 					const canRetrieveMenteeList =
-						userId == sessionDetailedResponse.created_by || userId == sessionDetailedResponse.mentor_id
+						userId == sessionDetailedResponse.created_by ||
+						userId == sessionDetailedResponse.mentor_id ||
+						hasSessionAttendeeManageAccess(sessionDetailedResponse, roles, organizationId, tenantCode)
 
 					const shouldIncludeMentees = isMenteesListRequested && canRetrieveMenteeList
 					if (!shouldIncludeMentees) {
@@ -1689,7 +1701,10 @@ module.exports = class SessionsHelper {
 				}
 			}
 
-			const canRetrieveMenteeList = userId == sessionDetails.created_by || userId == sessionDetails.mentor_id
+			const canRetrieveMenteeList =
+				userId == sessionDetails.created_by ||
+				userId == sessionDetails.mentor_id ||
+				hasSessionAttendeeManageAccess(sessionDetails, roles, organizationId, tenantCode)
 			sessionDetails.mentees = await getEnrolledMentees(sessionDetails.id, {}, tenantCode)
 
 			let sessionAccessorDetails
