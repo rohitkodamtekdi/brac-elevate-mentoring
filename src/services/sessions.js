@@ -4411,16 +4411,18 @@ class MentorError extends Error {
 }
 
 /**
- * Check if the user's role allows managing attendees of the session.
- * Roles are configured via ROLES_WITH_SESSION_ATTENDEE_MANAGE_ACCESS.
- * - admin        : no tenant/org check
- * - tenant_admin : session tenant must match user's tenant
- * - org_admin    : session tenant and org must match user's tenant and org
- * @param {Object} session - Session details.
- * @param {Array} roles - User roles.
- * @param {String} organizationId - User organization id.
- * @param {String} tenantCode - User tenant code.
- * @returns {Boolean}
+ * @description 							- Check if the user's role allows managing attendees of the session.
+ * 											  Allowed roles are configured via ROLES_WITH_SESSSIONATTENDEEMANGEACCESS.
+ * 											  - admin        : no tenant/org check
+ * 											  - tenant_admin : session tenant must match user's tenant
+ * 											  - org_admin    : session tenant and org must match user's tenant and org
+ * @method
+ * @name hasSessionAttendeeManageAccess
+ * @param {Object} session 					- Session details.
+ * @param {Array} roles 					- User roles.
+ * @param {String} organizationId 			- User organization id.
+ * @param {String} tenantCode 				- User tenant code.
+ * @returns {Boolean} 						- True if the user can manage session attendees.
  */
 function hasSessionAttendeeManageAccess(session, roles, organizationId, tenantCode) {
 	const rolesEnv = process.env.ROLES_WITH_SESSSIONATTENDEEMANGEACCESS || ''
