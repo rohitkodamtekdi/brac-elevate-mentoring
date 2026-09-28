@@ -1571,7 +1571,7 @@ module.exports = class SessionsHelper {
 					const canRetrieveMenteeList =
 						userId == sessionDetailedResponse.created_by ||
 						userId == sessionDetailedResponse.mentor_id ||
-						hasSessionAttendeeManageAccess(sessionDetailedResponse, roles, organizationId, tenantCode)
+						hasSessionAttendeeManageAccess(sessionDetailedResponse, roles, tenantCode)
 
 					const shouldIncludeMentees = isMenteesListRequested && canRetrieveMenteeList
 					if (!shouldIncludeMentees) {
@@ -1695,7 +1695,7 @@ module.exports = class SessionsHelper {
 			const canRetrieveMenteeList =
 				userId == sessionDetails.created_by ||
 				userId == sessionDetails.mentor_id ||
-				hasSessionAttendeeManageAccess(sessionDetails, roles, organizationId, tenantCode)
+				hasSessionAttendeeManageAccess(sessionDetails, roles, tenantCode)
 			sessionDetails.mentees = await getEnrolledMentees(sessionDetails.id, {}, tenantCode)
 
 			let sessionAccessorDetails
@@ -3450,7 +3450,7 @@ module.exports = class SessionsHelper {
 	 * @returns {Promise<Object>} - A promise that resolves with the success response containing details of enrolled mentees.
 	 * @throws {Error} - Throws an error if there's an issue during data retrieval.
 	 */
-	static async enrolledMentees(sessionId, queryParams, userID, organizationId, roles, tenantCode) {
+	static async enrolledMentees(sessionId, queryParams, userID, orgCode, roles, tenantCode) {
 		try {
 			const session =
 				(await cacheHelper.sessions.get(tenantCode, sessionId)) ??
@@ -3468,7 +3468,7 @@ module.exports = class SessionsHelper {
 				})
 			}
 
-			const hasAttendeeManageAccess = hasSessionAttendeeManageAccess(session, roles, organizationId, tenantCode)
+			const hasAttendeeManageAccess = hasSessionAttendeeManageAccess(session, roles, tenantCode)
 
 			if (session.created_by != userID && session.mentor_id != userID && !hasAttendeeManageAccess) {
 				return responses.failureResponse({
@@ -4404,18 +4404,16 @@ class MentorError extends Error {
 /**
  * @description 							- Check if the user's role allows managing attendees of the session.
  * 											  Allowed roles are configured via ROLES_WITH_SESSSIONATTENDEEMANGEACCESS.
- * 											  - admin        : no tenant/org check
- * 											  - tenant_admin : session tenant must match user's tenant
- * 											  - org_admin    : session tenant and org must match user's tenant and org
+ * 											  - admin        : no tenant check
+ * 											  - other roles  : session tenant must match user's tenant
  * @method
  * @name hasSessionAttendeeManageAccess
  * @param {Object} session 					- Session details.
  * @param {Array} roles 					- User roles.
- * @param {String} organizationId 			- User organization id.
  * @param {String} tenantCode 				- User tenant code.
  * @returns {Boolean} 						- True if the user can manage session attendees.
  */
-function hasSessionAttendeeManageAccess(session, roles, organizationId, tenantCode) {
+function hasSessionAttendeeManageAccess(session, roles, tenantCode) {
 	const rolesEnv = process.env.ROLES_WITH_SESSSIONATTENDEEMANGEACCESS || ''
 	const allowedRoles = rolesEnv
 		.split(',')
@@ -4427,10 +4425,5 @@ function hasSessionAttendeeManageAccess(session, roles, organizationId, tenantCo
 
 	if (userRoles.includes(common.ADMIN_ROLE)) return true
 
-	const isSameTenant = session.tenant_code === tenantCode
-	if (userRoles.includes(common.TENANT_ADMIN_ROLE) && isSameTenant) return true
-
-	return (
-		userRoles.includes(common.ORG_ADMIN_ROLE) && isSameTenant && session.mentor_organization_id === organizationId
-	)
+	return userRoles.length > 0 && session.tenant_code === tenantCode
 }
