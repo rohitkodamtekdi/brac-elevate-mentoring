@@ -1459,16 +1459,7 @@ module.exports = class SessionsHelper {
 	 * @returns {JSON} 							- Session details
 	 */
 
-	static async details(
-		id,
-		userId = '',
-		isAMentor = '',
-		queryParams,
-		roles,
-		orgCode,
-		tenantCode,
-		organizationId = ''
-	) {
+	static async details(id, userId = '', isAMentor = '', queryParams, roles, orgCode, tenantCode, organizationId) {
 		try {
 			let filter = {}
 			if (utils.isNumeric(id)) {
