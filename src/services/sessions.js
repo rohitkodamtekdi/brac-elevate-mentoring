@@ -3444,7 +3444,7 @@ module.exports = class SessionsHelper {
 	 * @returns {Promise<Object>} - A promise that resolves with the success response containing details of enrolled mentees.
 	 * @throws {Error} - Throws an error if there's an issue during data retrieval.
 	 */
-	static async enrolledMentees(sessionId, queryParams, userID, organizationId, tenantCode) {
+	static async enrolledMentees(sessionId, queryParams, userID, organizationId, roles, tenantCode) {
 		try {
 			const session =
 				(await cacheHelper.sessions.get(tenantCode, sessionId)) ??
@@ -3460,7 +3460,16 @@ module.exports = class SessionsHelper {
 					statusCode: httpStatusCode.bad_request,
 					responseCode: 'CLIENT_ERROR',
 				})
-			} else if (session.created_by != userID && session.mentor_id != userID) {
+			}
+
+			const isOrgAdminForSession =
+				Array.isArray(roles) &&
+				roles.some((role) => role.title === common.ORG_ADMIN_ROLE) &&
+				(session.mentor_organization_id === organizationId ||
+					(Array.isArray(session.visible_to_organizations) &&
+						session.visible_to_organizations.includes(organizationId)))
+
+			if (session.created_by != userID && session.mentor_id != userID && !isOrgAdminForSession) {
 				return responses.failureResponse({
 					message: 'SESSION_NOT_FOUND',
 					statusCode: httpStatusCode.bad_request,
