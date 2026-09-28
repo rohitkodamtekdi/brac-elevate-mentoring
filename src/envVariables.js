@@ -647,6 +647,11 @@ let enviromentVariables = {
 		optional: true,
 		default: false,
 	},
+	ROLES_WITH_SESSSIONATTENDEEMANGEACCESS: {
+		message: 'Roles allowed to manage session attendees',
+		optional: true,
+		default: 'admin,tenant_admin,org_admin',
+	},
 }
 
 let success = true

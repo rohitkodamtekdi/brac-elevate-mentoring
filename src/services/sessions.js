@@ -3462,14 +3462,9 @@ module.exports = class SessionsHelper {
 				})
 			}
 
-			const isOrgAdminForSession =
-				Array.isArray(roles) &&
-				roles.some((role) => role.title === common.ORG_ADMIN_ROLE) &&
-				(session.mentor_organization_id === organizationId ||
-					(Array.isArray(session.visible_to_organizations) &&
-						session.visible_to_organizations.includes(organizationId)))
+			const hasAttendeeManageAccess = hasSessionAttendeeManageAccess(session, roles, organizationId, tenantCode)
 
-			if (session.created_by != userID && session.mentor_id != userID && !isOrgAdminForSession) {
+			if (session.created_by != userID && session.mentor_id != userID && !hasAttendeeManageAccess) {
 				return responses.failureResponse({
 					message: 'SESSION_NOT_FOUND',
 					statusCode: httpStatusCode.bad_request,
@@ -4398,4 +4393,36 @@ class MentorError extends Error {
 		this.name = 'MentorError'
 		this.data = data
 	}
+}
+
+/**
+ * Check if the user's role allows managing attendees of the session.
+ * Roles are configured via ROLES_WITH_SESSION_ATTENDEE_MANAGE_ACCESS.
+ * - admin        : no tenant/org check
+ * - tenant_admin : session tenant must match user's tenant
+ * - org_admin    : session tenant and org must match user's tenant and org
+ * @param {Object} session - Session details.
+ * @param {Array} roles - User roles.
+ * @param {String} organizationId - User organization id.
+ * @param {String} tenantCode - User tenant code.
+ * @returns {Boolean}
+ */
+function hasSessionAttendeeManageAccess(session, roles, organizationId, tenantCode) {
+	const rolesEnv = process.env.ROLES_WITH_SESSSIONATTENDEEMANGEACCESS || ''
+	const allowedRoles = rolesEnv
+		.split(',')
+		.map((role) => role.trim())
+		.filter(Boolean)
+	const userRoles = (Array.isArray(roles) ? roles : [])
+		.map((role) => role.title)
+		.filter((title) => allowedRoles.includes(title))
+
+	if (userRoles.includes(common.ADMIN_ROLE)) return true
+
+	const isSameTenant = session.tenant_code === tenantCode
+	if (userRoles.includes(common.TENANT_ADMIN_ROLE) && isSameTenant) return true
+
+	return (
+		userRoles.includes(common.ORG_ADMIN_ROLE) && isSameTenant && session.mentor_organization_id === organizationId
+	)
 }
