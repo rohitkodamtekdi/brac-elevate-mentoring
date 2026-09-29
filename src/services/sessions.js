@@ -3612,6 +3612,16 @@ module.exports = class SessionsHelper {
 				// Cache invalidation failure - continue operation
 			}
 
+			// Push to Kafka for brac_utility to sync with Project Service
+			try {
+				await kafkaCommunication.pushSessionEnrollmentToKafka({
+					sessionId: sessionId,
+					userIds: successIds,
+				})
+			} catch (kafkaErr) {
+				console.error('Failed to push session enrollment to kafka:', kafkaErr)
+			}
+
 			return responses.successResponse({
 				statusCode: httpStatusCode.created,
 				message: 'MENTEES_ARE_ADDED_SUCCESSFULLY',

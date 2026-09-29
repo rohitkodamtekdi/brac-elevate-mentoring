@@ -37,6 +37,20 @@ const clearInternalCache = async (key) => {
 	}
 }
 
+const pushSessionEnrollmentToKafka = async (data) => {
+	try {
+		const topic = process.env.SESSION_ENROLLMENT_TOPIC || 'session-enrollment-topic'
+		const payload = {
+			topic,
+			messages: [{ value: JSON.stringify(data) }],
+		}
+		console.log('Pushing session enrollment event to kafka:', payload)
+		return await pushPayloadToKafka(payload)
+	} catch (error) {
+		console.error('Error pushing session enrollment to Kafka:', error)
+	}
+}
+
 const pushPayloadToKafka = async (payload) => {
 	try {
 		console.log('sending kafka message from service ', payload)
@@ -51,4 +65,5 @@ const pushPayloadToKafka = async (payload) => {
 module.exports = {
 	pushEmailToKafka,
 	clearInternalCache,
+	pushSessionEnrollmentToKafka,
 }
