@@ -386,6 +386,7 @@ module.exports = class Sessions {
 				req.query,
 				req.decodedToken.id,
 				req.decodedToken.organization_code,
+				req.decodedToken.roles,
 				req.decodedToken.tenant_code
 			)
 		} catch (error) {

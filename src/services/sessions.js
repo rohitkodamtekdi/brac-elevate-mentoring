@@ -1455,10 +1455,11 @@ module.exports = class SessionsHelper {
 	 * @param {String} id 						- Session id.
 	 * @param {Number} userId 					- User id.
 	 * @param {Boolean} isAMentor 				- user mentor or not.
+	 * @param {String} organizationId 			- User organization id.
 	 * @returns {JSON} 							- Session details
 	 */
 
-	static async details(id, userId = '', isAMentor = '', queryParams, roles, orgCode, tenantCode) {
+	static async details(id, userId = '', isAMentor = '', queryParams, roles, orgCode, tenantCode, organizationId) {
 		try {
 			let filter = {}
 			if (utils.isNumeric(id)) {
@@ -1568,7 +1569,9 @@ module.exports = class SessionsHelper {
 					}
 
 					const canRetrieveMenteeList =
-						userId == sessionDetailedResponse.created_by || userId == sessionDetailedResponse.mentor_id
+						userId == sessionDetailedResponse.created_by ||
+						userId == sessionDetailedResponse.mentor_id ||
+						hasSessionAttendeeManageAccess(sessionDetailedResponse, roles, tenantCode)
 
 					const shouldIncludeMentees = isMenteesListRequested && canRetrieveMenteeList
 					if (!shouldIncludeMentees) {
@@ -1689,7 +1692,10 @@ module.exports = class SessionsHelper {
 				}
 			}
 
-			const canRetrieveMenteeList = userId == sessionDetails.created_by || userId == sessionDetails.mentor_id
+			const canRetrieveMenteeList =
+				userId == sessionDetails.created_by ||
+				userId == sessionDetails.mentor_id ||
+				hasSessionAttendeeManageAccess(sessionDetails, roles, tenantCode)
 			sessionDetails.mentees = await getEnrolledMentees(sessionDetails.id, {}, tenantCode)
 
 			let sessionAccessorDetails
@@ -3444,7 +3450,7 @@ module.exports = class SessionsHelper {
 	 * @returns {Promise<Object>} - A promise that resolves with the success response containing details of enrolled mentees.
 	 * @throws {Error} - Throws an error if there's an issue during data retrieval.
 	 */
-	static async enrolledMentees(sessionId, queryParams, userID, organizationId, tenantCode) {
+	static async enrolledMentees(sessionId, queryParams, userID, orgCode, roles, tenantCode) {
 		try {
 			const session =
 				(await cacheHelper.sessions.get(tenantCode, sessionId)) ??
@@ -3460,7 +3466,11 @@ module.exports = class SessionsHelper {
 					statusCode: httpStatusCode.bad_request,
 					responseCode: 'CLIENT_ERROR',
 				})
-			} else if (session.created_by != userID && session.mentor_id != userID) {
+			}
+
+			const hasAttendeeManageAccess = hasSessionAttendeeManageAccess(session, roles, tenantCode)
+
+			if (session.created_by != userID && session.mentor_id != userID && !hasAttendeeManageAccess) {
 				return responses.failureResponse({
 					message: 'SESSION_NOT_FOUND',
 					statusCode: httpStatusCode.bad_request,
@@ -4389,4 +4399,31 @@ class MentorError extends Error {
 		this.name = 'MentorError'
 		this.data = data
 	}
+}
+
+/**
+ * @description 							- Check if the user's role allows managing attendees of the session.
+ * 											  Allowed roles are configured via ROLES_WITH_SESSSIONATTENDEEMANGEACCESS.
+ * 											  - admin        : no tenant check
+ * 											  - other roles  : session tenant must match user's tenant
+ * @method
+ * @name hasSessionAttendeeManageAccess
+ * @param {Object} session 					- Session details.
+ * @param {Array} roles 					- User roles.
+ * @param {String} tenantCode 				- User tenant code.
+ * @returns {Boolean} 						- True if the user can manage session attendees.
+ */
+function hasSessionAttendeeManageAccess(session, roles, tenantCode) {
+	const rolesEnv = process.env.ROLES_WITH_SESSSIONATTENDEEMANGEACCESS || ''
+	const allowedRoles = rolesEnv
+		.split(',')
+		.map((role) => role.trim())
+		.filter(Boolean)
+	const userRoles = (Array.isArray(roles) ? roles : [])
+		.map((role) => role.title)
+		.filter((title) => allowedRoles.includes(title))
+
+	if (userRoles.includes(common.ADMIN_ROLE)) return true
+
+	return userRoles.length > 0 && session.tenant_code === tenantCode
 }
