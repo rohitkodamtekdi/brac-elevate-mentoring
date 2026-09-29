@@ -1,3 +1,4 @@
+const crypto = require('crypto')
 // Dependencies
 const _ = require('lodash')
 const moment = require('moment-timezone')
@@ -3615,8 +3616,11 @@ module.exports = class SessionsHelper {
 			// Push to Kafka for brac_utility to sync with Project Service
 			try {
 				await kafkaCommunication.pushSessionEnrollmentToKafka({
-					sessionId: sessionId,
-					userIds: successIds,
+					eventId: crypto.randomUUID(),
+					eventType: 'SESSION_MENTEES_ASSIGNED',
+					sessionId: String(sessionId),
+					mentees: successIds,
+					occurredAt: new Date().toISOString(),
 				})
 			} catch (kafkaErr) {
 				console.error('Failed to push session enrollment to kafka:', kafkaErr)
