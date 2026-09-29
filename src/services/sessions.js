@@ -1,3 +1,4 @@
+const crypto = require('crypto')
 // Dependencies
 const _ = require('lodash')
 const moment = require('moment-timezone')
@@ -3610,6 +3611,19 @@ module.exports = class SessionsHelper {
 				await cacheHelper.sessions.delete(tenantCode, sessionId)
 			} catch (cacheError) {
 				// Cache invalidation failure - continue operation
+			}
+
+			// Push to Kafka for brac_utility to sync with Project Service
+			try {
+				await kafkaCommunication.pushSessionEnrollmentToKafka({
+					eventId: crypto.randomUUID(),
+					eventType: 'SESSION_MENTEES_ASSIGNED',
+					sessionId: String(sessionId),
+					mentees: successIds,
+					occurredAt: new Date().toISOString(),
+				})
+			} catch (kafkaErr) {
+				console.error('Failed to push session enrollment to kafka:', kafkaErr)
 			}
 
 			return responses.successResponse({
