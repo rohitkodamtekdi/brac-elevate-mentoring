@@ -26,4 +26,8 @@ module.exports = {
 	details: (req) => {
 		req.checkParams('id').notEmpty().withMessage('id param is empty')
 	},
+
+	cancel: (req) => {
+		req.checkParams('id').notEmpty().withMessage('id param is empty')
+	},
 }

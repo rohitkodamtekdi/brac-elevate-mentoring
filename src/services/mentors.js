@@ -9,6 +9,7 @@ const { UniqueConstraintError } = require('sequelize')
 const _ = require('lodash')
 const sessionAttendeesQueries = require('@database/queries/sessionAttendees')
 const sessionQueries = require('@database/queries/sessions')
+const schedulerRequest = require('@requests/scheduler')
 const entityTypeQueries = require('@database/queries/entityType')
 const entityTypeCache = require('@helpers/entityTypeCache')
 const organisationExtensionQueries = require('@database/queries/organisationExtension')
@@ -1877,6 +1878,81 @@ module.exports = class MentorsHelper {
 				statusCode: httpStatusCode.ok,
 				message: 'SESSION_FETCHED_SUCCESSFULLY',
 				result: { count: sessionDetails.count, data: sessionDetails.rows },
+			})
+		} catch (error) {
+			throw error
+		}
+	}
+
+	/**
+	 * Cancel a session (Support Provider "Cancel Intervention").
+	 * Follows the same cancellation steps as admin notifyAndCancelPrivateSessions.
+	 * @method
+	 * @name cancel
+	 * @param {String} sessionId - Session id.
+	 * @param {String} userId - Logged in user id.
+	 * @param {String} tenantCode - Tenant code.
+	 * @returns {JSON} - Cancel session response.
+	 */
+	static async cancel(sessionId, userId, tenantCode) {
+		try {
+			const sessionDetail = await sessionQueries.findById(sessionId, tenantCode)
+			if (!sessionDetail) {
+				return responses.failureResponse({
+					message: 'SESSION_NOT_FOUND',
+					statusCode: httpStatusCode.bad_request,
+					responseCode: 'CLIENT_ERROR',
+				})
+			}
+
+			// Only the creator or the mentor of the session can cancel it
+			if (sessionDetail.created_by != userId && sessionDetail.mentor_id != userId) {
+				return responses.failureResponse({
+					message: 'INVALID_PERMISSION',
+					statusCode: httpStatusCode.bad_request,
+					responseCode: 'CLIENT_ERROR',
+				})
+			}
+
+			if (sessionDetail.status != common.PUBLISHED_STATUS) {
+				return responses.failureResponse({
+					message: 'CANNOT_CANCEL_SESSION',
+					statusCode: httpStatusCode.bad_request,
+					responseCode: 'CLIENT_ERROR',
+				})
+			}
+
+			// Mark session as cancelled/deleted
+			const updateCount = await sessionQueries.updateRecords(
+				{ deleted_at: new Date() },
+				{ where: { id: sessionDetail.id, tenant_code: tenantCode } }
+			)
+			if (!updateCount || updateCount instanceof Error) {
+				return responses.failureResponse({
+					message: 'SESSION_CANCELLATION_FAILED',
+					statusCode: httpStatusCode.bad_request,
+					responseCode: 'CLIENT_ERROR',
+				})
+			}
+
+			// Invalidate session cache
+			try {
+				await cacheHelper.sessions.delete(tenantCode, sessionDetail.id)
+			} catch (cacheErr) {
+				console.error(`Cache deletion failed for session ${sessionDetail.id}:`, cacheErr)
+			}
+
+			// Remove scheduled reminder jobs so no reminders go out
+			const sessionRelatedJobIds = common.notificationJobIdPrefixes.map((element) => element + sessionDetail.id)
+			for (const jobId of sessionRelatedJobIds) {
+				await schedulerRequest.removeScheduledJob({ jobId })
+			}
+
+			console.log(`Cancelled session ${sessionDetail.id} by user ${userId}`)
+
+			return responses.successResponse({
+				statusCode: httpStatusCode.accepted,
+				message: 'SESSION_CANCELLED_SUCCESSFULLY',
 			})
 		} catch (error) {
 			throw error

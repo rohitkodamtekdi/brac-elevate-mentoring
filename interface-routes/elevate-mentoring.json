@@ -1916,7 +1916,7 @@
 			]
 		},
 		{
-			"sourceRoute": "/mentoring/v1/sessions/cancel/:id",
+			"sourceRoute": "/mentoring/v1/mentors/cancel/:id",
 			"type": "POST",
 			"priority": "MUST_HAVE",
 			"inSequence": false,

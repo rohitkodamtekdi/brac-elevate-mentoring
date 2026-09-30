@@ -867,42 +867,29 @@ module.exports = class AdminService {
 		}
 	}
 
-	static async notifyAndCancelPrivateSessions(privateSessions, orgCodes, tenantCode, mentorId = null) {
+	static async notifyAndCancelPrivateSessions(privateSessions, orgCodes, tenantCode) {
 		const transaction = await sequelize.transaction()
 		try {
 			let allNotificationsSent = true
 
 			for (const session of privateSessions) {
-				// If mentorId is passed, verify session ownership
-				if (mentorId && session.mentor_id != mentorId) {
-					console.warn(`Mentor ${mentorId} is not authorized to cancel session ${session.id}`)
-					continue
-				}
-
-				// Check attendee count
+				// Check if this is a one-on-one session (only one attendee)
 				const attendeeCount = await sessionAttendeesQueries.getCount({
 					session_id: session.id,
 					tenant_code: tenantCode, // Use primary tenant for database query
 				})
 
-				// If mentor is cancelling directly, OR if it's the mentee deletion flow (attendeeCount === 1)
-				const isEligibleForCancellation = mentorId
-					? session.mentor_id == mentorId
-					: attendeeCount === 1 && session.mentor_id == session.created_by
+				if (attendeeCount === 1 && session.mentor_id == session.created_by) {
+					// This is a one-on-one private session, cancel it and notify mentor
+					const notificationSent = await this.notifyMentorAboutPrivateSessionCancellation(
+						session.mentor_id,
+						session,
+						orgCodes,
+						tenantCode
+					)
 
-				if (isEligibleForCancellation) {
-					// Notify mentor only in mentee-deletion flow; if mentor initiates, notification to mentor isn't strictly required
-					if (!mentorId) {
-						const notificationSent = await this.notifyMentorAboutPrivateSessionCancellation(
-							session.mentor_id,
-							session,
-							orgCodes,
-							tenantCode
-						)
-
-						if (!notificationSent) {
-							allNotificationsSent = false
-						}
+					if (!notificationSent) {
+						allNotificationsSent = false
 					}
 
 					// Mark session as cancelled/deleted
@@ -911,19 +898,9 @@ module.exports = class AdminService {
 						{ where: { id: session.id, tenant_code: tenantCode } }, // Use primary tenant for database query
 						transaction
 					)
+					// sessionOwnership deletion removed - no longer needed with direct Session mentor_id management
 
-					// Invalidate session cache
-					try {
-						await cacheHelper.sessions.delete(tenantCode, session.id)
-					} catch (cacheErr) {
-						console.error(`Cache deletion failed for session ${session.id}:`, cacheErr)
-					}
-
-					console.log(
-						`Cancelled private session ${session.id} ${
-							mentorId ? `by mentor ${mentorId}` : 'due to mentee deletion'
-						}`
-					)
+					console.log(`Cancelled private session ${session.id} due to mentee deletion`)
 				}
 			}
 			await transaction.commit()
