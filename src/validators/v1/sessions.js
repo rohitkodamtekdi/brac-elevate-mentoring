@@ -130,6 +130,9 @@ module.exports = {
 		req.checkParams('id').notEmpty().withMessage('id param is empty')
 	},
 
+	cancel: (req) => {
+		req.checkParams('id').notEmpty().withMessage('id param is empty')
+	},
 	enroll: (req) => {
 		req.checkParams('id').notEmpty().withMessage('id param is empty')
 	},

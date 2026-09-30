@@ -489,6 +489,27 @@ module.exports = class Sessions {
 	}
 
 	/**
+	 * Cancel Session
+	 * @method
+	 * @name cancel
+	 * @param {Object} req - request data.
+	 * @param {String} req.params.id - Session id.
+	 * @returns {JSON} - Cancel session response.
+	 */
+	async cancel(req) {
+		try {
+			return await sessionService.cancel(
+				req.params.id,
+				req.decodedToken.id,
+				req.decodedToken.organization_code,
+				req.decodedToken.tenant_code
+			)
+		} catch (error) {
+			return error
+		}
+	}
+
+	/**
 	 * Remove Sessions Of Multiple Mentors In One Go
 	 * @method
 	 * @name removeAllSessions
