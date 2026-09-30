@@ -3557,6 +3557,24 @@ module.exports = class SessionsHelper {
 					responseCode: 'CLIENT_ERROR',
 				})
 			}
+
+			// enroll() checks seats per mentee, but the enrollments below run in parallel against the same
+			// session snapshot, so a batch could overbook - reject it upfront using the latest seat count.
+			const latestSession = await sessionQueries.findById(sessionId, tenantCode)
+			const seatsRemaining = Number(latestSession?.seats_remaining ?? sessionDetails.seats_remaining)
+			// The session creator doesn't consume a seat (same rule as enroll())
+			const seatsNeeded = mentees.filter((mentee) => mentee.user_id != sessionDetails.created_by).length
+			if (Number.isFinite(seatsRemaining) && seatsNeeded > seatsRemaining) {
+				return responses.failureResponse({
+					message: {
+						key: 'SESSION_SEAT_LIMIT_EXCEEDED',
+						interpolation: { seatsRemaining: Math.max(0, seatsRemaining) },
+					},
+					statusCode: httpStatusCode.bad_request,
+					responseCode: 'CLIENT_ERROR',
+				})
+			}
+
 			// Enroll mentees
 			const successIds = []
 			const failedIds = []

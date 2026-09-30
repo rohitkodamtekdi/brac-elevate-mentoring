@@ -70,6 +70,7 @@
 	"SESSION_EDIT_WINDOW": "Session editing is only allowed up to {{editWindow}} minutes before the session start time.",
 	"CANNOT_EDIT_LIVE_SESSION": "Cannot edit ongoing session.",
 	"SESSION_SEAT_FULL": "Session seats full.",
+	"SESSION_SEAT_LIMIT_EXCEEDED": "Only {{seatsRemaining}} seat(s) left in this session. Please select fewer participants.",
 	"APP_CONFIG_FETCHED_SUCCESSFULLY": "App config fetched successfully.",
 	"USER_REMOVED_SUCCESSFULLY": "User details removed successfully.",
 	"USER_NOT_REMOVED_SUCCESSFULLY": "Error while removing user details.",
