@@ -567,6 +567,11 @@ let enviromentVariables = {
 		optional: true,
 		default: 'mentor_deletion_notification_email',
 	},
+	SESSION_CANCELLED_EMAIL_TEMPLATE: {
+		message: 'Required email template code to notify attendees when a session is cancelled',
+		optional: true,
+		default: 'session_deleted_by_manager',
+	},
 	PRIVATE_SESSION_CANCELLED_EMAIL_TEMPLATE: {
 		message: 'Required private session cancelled email template code',
 		optional: true,

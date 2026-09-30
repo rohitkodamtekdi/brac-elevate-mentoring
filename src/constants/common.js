@@ -64,6 +64,7 @@ module.exports = {
 	LIVE_STATUS: 'LIVE',
 	UPCOMING_STATUS: 'UPCOMING',
 	DRAFT_STATUS: 'DRAFT',
+	CANCELLED_STATUS: 'CANCELLED',
 	MENTOR_EVALUATING: 'mentor',
 	internalCacheExpirationTime: process.env.INTERNAL_CACHE_EXP_TIME, // In Seconds
 	RedisCacheExpiryTime: process.env.REDIS_CACHE_EXP_TIME,
