@@ -4238,6 +4238,19 @@
 			]
 		},
 		{
+			"sourceRoute": "/mentoring/v1/requestSessions/update",
+			"type": "POST",
+			"priority": "MUST_HAVE",
+			"inSequence": false,
+			"orchestrated": false,
+			"targetPackages": [
+				{
+					"basePackageName": "mentoring",
+					"packageName": "elevate-mentoring"
+				}
+			]
+		},
+		{
 			"sourceRoute": "/mentoring/v1/org-admin/updateTheme",
 			"type": "POST",
 			"priority": "MUST_HAVE",

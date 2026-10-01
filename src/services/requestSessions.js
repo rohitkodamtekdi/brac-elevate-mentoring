@@ -747,6 +747,103 @@ module.exports = class requestSessionsHelper {
 	}
 
 	/**
+	 * Update a pending session request.
+	 * Only RequestSession entity type fields are accepted (validated the same way as create);
+	 * they are merged into the request's meta, e.g. extra_information asked by a Support Provider.
+	 * @param {Object} bodyData - { request_session_id, ...entityTypeFields }
+	 * @param {String} userId - Logged in user id.
+	 * @param {String} orgCode - Organization code of the logged in user.
+	 * @param {String} tenantCode - Tenant code.
+	 * @returns {JSON} - Updated session request meta.
+	 */
+	static async update(bodyData, userId, orgCode, tenantCode) {
+		try {
+			const { request_session_id: requestSessionId, ...updateData } = bodyData
+
+			const requestDetails = await sessionRequestQueries.findOneRequest(requestSessionId, tenantCode)
+			if (!requestDetails) {
+				return responses.failureResponse({
+					statusCode: httpStatusCode.not_found,
+					responseCode: 'CLIENT_ERROR',
+					message: 'SESSION_REQUEST_NOT_FOUND_OR_ALREADY_PROCESSED',
+				})
+			}
+
+			const rejectedRequestees = requestDetails.rejected_requestees || []
+			if (rejectedRequestees.includes(String(userId))) {
+				return responses.failureResponse({
+					statusCode: httpStatusCode.bad_request,
+					responseCode: 'CLIENT_ERROR',
+					message: 'INVALID_PERMISSION',
+				})
+			}
+
+			const defaults = await getDefaults()
+			if (!defaults.orgCode)
+				return responses.failureResponse({
+					message: 'DEFAULT_ORG_CODE_NOT_SET',
+					statusCode: httpStatusCode.bad_request,
+					responseCode: 'CLIENT_ERROR',
+				})
+
+			const requestSessionModelName = await sessionRequestQueries.getModelName()
+			const entityTypes = await entityTypeCache.getEntityTypesAndEntitiesForModel(
+				requestSessionModelName,
+				tenantCode,
+				orgCode
+			)
+			const validationData = removeDefaultOrgEntityTypes(entityTypes, defaults.orgCode)
+
+			// Skip required checks: an update only sends the fields being changed
+			const validation = utils.validateInput(updateData, validationData, requestSessionModelName, true)
+			if (!validation.success) {
+				return responses.failureResponse({
+					message: 'SESSION_REQUEST_UPDATE_FAILED',
+					statusCode: httpStatusCode.bad_request,
+					responseCode: 'CLIENT_ERROR',
+					result: validation.errors,
+				})
+			}
+
+			const requestSessionColumns = await sessionRequestQueries.getColumns()
+			const restructuredData = utils.restructureBody(updateData, validationData, requestSessionColumns)
+			if (!restructuredData?.meta) {
+				return responses.failureResponse({
+					message: 'SESSION_REQUEST_NO_FIELDS_TO_UPDATE',
+					statusCode: httpStatusCode.bad_request,
+					responseCode: 'CLIENT_ERROR',
+				})
+			}
+
+			const meta = { ...(requestDetails.meta || {}), ...restructuredData.meta }
+			const [updatedCount] = await sessionRequestQueries.updateRequest(
+				userId,
+				requestDetails.id,
+				meta,
+				tenantCode
+			)
+			if (updatedCount == 0) {
+				return responses.failureResponse({
+					statusCode: httpStatusCode.not_found,
+					responseCode: 'CLIENT_ERROR',
+					message: 'SESSION_REQUEST_NOT_FOUND_OR_ALREADY_PROCESSED',
+				})
+			}
+
+			return responses.successResponse({
+				statusCode: httpStatusCode.ok,
+				message: 'SESSION_REQUEST_UPDATED',
+				result: {
+					id: String(requestDetails.id),
+					meta,
+				},
+			})
+		} catch (error) {
+			throw error
+		}
+	}
+
+	/**
 	 * Get information about a session between the authenticated user and another user.
 	 * @param {Object} req - The request object.
 	 * @param {Object} req.body - The body of the request.
