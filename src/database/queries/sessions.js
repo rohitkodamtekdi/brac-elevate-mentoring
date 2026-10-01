@@ -210,7 +210,7 @@ exports.getSessionByUserIdAndTime = async (userId, startDate, endDate, sessionId
 		let startDateResponse, endDateResponse
 		const query = {
 			mentor_id: userId,
-			status: { [Op.ne]: common.COMPLETED_STATUS },
+			status: { [Op.notIn]: [common.COMPLETED_STATUS, common.CANCELLED_STATUS] },
 		}
 
 		if (startDate) {

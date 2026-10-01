@@ -26,4 +26,16 @@ module.exports = {
 	details: (req) => {
 		req.checkParams('id').notEmpty().withMessage('id param is empty')
 	},
+
+	cancel: (req) => {
+		req.checkParams('id').notEmpty().withMessage('id param is empty')
+		req.checkBody('reason')
+			.trim()
+			.notEmpty()
+			.withMessage('reason is required')
+			.isString()
+			.withMessage('reason must be a string')
+			.isLength({ max: 500 })
+			.withMessage('reason must be 500 characters or fewer')
+	},
 }

@@ -175,6 +175,29 @@ module.exports = class Mentors {
 		}
 	}
 
+	/**
+	 * Cancel Session
+	 * @method
+	 * @name cancel
+	 * @param {Object} req - request data.
+	 * @param {String} req.params.id - Session id.
+	 * @param {String} req.body.reason - Reason for cancellation.
+	 * @returns {JSON} - Cancel session response.
+	 */
+	async cancel(req) {
+		try {
+			return await mentorsService.cancel(
+				req.params.id,
+				req.decodedToken.id,
+				req.decodedToken.tenant_code,
+				req.decodedToken.organization_code,
+				req.body
+			)
+		} catch (error) {
+			return error
+		}
+	}
+
 	//To be removed later
 	// /**
 	//  * Create a new mentor extension.

@@ -9,6 +9,7 @@ const { UniqueConstraintError } = require('sequelize')
 const _ = require('lodash')
 const sessionAttendeesQueries = require('@database/queries/sessionAttendees')
 const sessionQueries = require('@database/queries/sessions')
+const schedulerRequest = require('@requests/scheduler')
 const entityTypeQueries = require('@database/queries/entityType')
 const entityTypeCache = require('@helpers/entityTypeCache')
 const organisationExtensionQueries = require('@database/queries/organisationExtension')
@@ -29,6 +30,7 @@ const connectionQueries = require('@database/queries/connection')
 const communicationHelper = require('@helpers/communications')
 const searchConfig = require('@root/config.json')
 const cacheHelper = require('@generics/cacheHelper')
+const kafkaCommunication = require('@generics/kafka-communication')
 const getOrgIdAndEntityTypes = require('@helpers/getOrgIdAndEntityTypewithEntitiesBasedOnPolicy')
 module.exports = class MentorsHelper {
 	/**
@@ -1881,6 +1883,161 @@ module.exports = class MentorsHelper {
 		} catch (error) {
 			throw error
 		}
+	}
+
+	/**
+	 * Cancel a session (Support Provider "Cancel Intervention").
+	 * Follows the same cancellation steps as admin notifyAndCancelPrivateSessions.
+	 * @method
+	 * @name cancel
+	 * @param {String} sessionId - Session id.
+	 * @param {String} userId - Logged in user id.
+	 * @param {String} tenantCode - Tenant code.
+	 * @param {String} orgCode - Organization code of the logged in user.
+	 * @param {Object} bodyData - Request body.
+	 * @param {String} bodyData.reason - Reason for cancellation.
+	 * @returns {JSON} - Cancel session response.
+	 */
+	static async cancel(sessionId, userId, tenantCode, orgCode, bodyData) {
+		try {
+			const { reason } = bodyData
+			const sessionDetail = await sessionQueries.findById(sessionId, tenantCode)
+			if (!sessionDetail) {
+				return responses.failureResponse({
+					message: 'SESSION_NOT_FOUND',
+					statusCode: httpStatusCode.bad_request,
+					responseCode: 'CLIENT_ERROR',
+				})
+			}
+
+			// Only the creator or the mentor of the session can cancel it
+			if (sessionDetail.created_by != userId && sessionDetail.mentor_id != userId) {
+				return responses.failureResponse({
+					message: 'INVALID_PERMISSION',
+					statusCode: httpStatusCode.bad_request,
+					responseCode: 'CLIENT_ERROR',
+				})
+			}
+
+			if (sessionDetail.status != common.PUBLISHED_STATUS) {
+				return responses.failureResponse({
+					message: 'CANNOT_CANCEL_SESSION',
+					statusCode: httpStatusCode.bad_request,
+					responseCode: 'CLIENT_ERROR',
+				})
+			}
+
+			// Mark session as CANCELLED (not soft-deleted) so cancelled sessions stay distinguishable
+			// from deleted ones, and record who cancelled it, when and why.
+			const updateCount = await sessionQueries.updateRecords(
+				{
+					status: common.CANCELLED_STATUS,
+					meta: {
+						...(sessionDetail.meta || {}),
+						cancellation: {
+							reason,
+							cancelled_by: userId,
+							cancelled_at: new Date(),
+						},
+					},
+				},
+				{ where: { id: sessionDetail.id, tenant_code: tenantCode, status: common.PUBLISHED_STATUS } }
+			)
+			if (!updateCount || updateCount instanceof Error) {
+				return responses.failureResponse({
+					message: 'SESSION_CANCELLATION_FAILED',
+					statusCode: httpStatusCode.bad_request,
+					responseCode: 'CLIENT_ERROR',
+				})
+			}
+
+			// Invalidate session cache
+			try {
+				await cacheHelper.sessions.delete(tenantCode, sessionDetail.id)
+			} catch (cacheErr) {
+				console.error(`Cache deletion failed for session ${sessionDetail.id}:`, cacheErr)
+			}
+
+			// Remove scheduled reminder jobs so no reminders go out
+			const sessionRelatedJobIds = common.notificationJobIdPrefixes.map((element) => element + sessionDetail.id)
+			for (const jobId of sessionRelatedJobIds) {
+				await schedulerRequest.removeScheduledJob({ jobId })
+			}
+
+			// Notify enrolled attendees. A notification failure should not fail the cancellation itself.
+			try {
+				await this._notifyAttendeesAboutSessionCancellation(sessionDetail, reason, tenantCode, orgCode)
+			} catch (notifyErr) {
+				console.error(`Failed to notify attendees of cancelled session ${sessionDetail.id}:`, notifyErr)
+			}
+
+			console.log(`Cancelled session ${sessionDetail.id} by user ${userId}`)
+
+			return responses.successResponse({
+				statusCode: httpStatusCode.accepted,
+				message: 'SESSION_CANCELLED_SUCCESSFULLY',
+			})
+		} catch (error) {
+			throw error
+		}
+	}
+
+	/**
+	 * Private method: Email all enrolled attendees that a session has been cancelled.
+	 * Uses the same payload shape as the session delete flow in sessions.update.
+	 * @param {Object} sessionDetail - Cancelled session.
+	 * @param {String} reason - Reason for cancellation.
+	 * @param {String} tenantCode - Tenant code.
+	 * @param {String} orgCode - Organization code used to resolve the email template.
+	 */
+	static async _notifyAttendeesAboutSessionCancellation(sessionDetail, reason, tenantCode, orgCode) {
+		// Enrolled mentees are stored in session_attendees (written by sessions.enroll via findOrCreateAttendee)
+		const sessionAttendees = await sessionAttendeesQueries.findAll({ session_id: sessionDetail.id }, tenantCode)
+		if (sessionAttendees instanceof Error) throw sessionAttendees
+		if (!sessionAttendees?.length) return
+
+		const templateCode = process.env.SESSION_CANCELLED_EMAIL_TEMPLATE
+		const templateData = await cacheHelper.notificationTemplates.get(tenantCode, orgCode, templateCode)
+		if (!templateData) {
+			console.log(`Template ${templateCode} not found, skipping cancellation emails`)
+			return
+		}
+
+		const attendeeIds = sessionAttendees.map((attendee) => attendee.mentee_id)
+		const attendeesAccounts = await userRequests.getUserDetailedList(attendeeIds, tenantCode, false, true)
+		const attendeeDetails = attendeesAccounts?.result || []
+
+		const sessionDuration = Math.round(
+			moment.duration(moment.unix(sessionDetail.end_date).diff(moment.unix(sessionDetail.start_date))).asMinutes()
+		)
+		const startDate = utils.getTimeZone(sessionDetail.start_date, common.dateFormat, sessionDetail.time_zone)
+		const startTime = utils.getTimeZone(sessionDetail.start_date, common.timeFormat, sessionDetail.time_zone)
+
+		await Promise.all(
+			attendeeDetails
+				.filter((attendee) => attendee.email)
+				.map((attendee) =>
+					kafkaCommunication.pushEmailToKafka({
+						type: 'email',
+						email: {
+							to: attendee.email,
+							subject: utils.composeEmailBody(templateData.subject, {
+								sessionTitle: sessionDetail.title,
+							}),
+							body: utils.composeEmailBody(templateData.body, {
+								name: attendee.name,
+								sessionTitle: sessionDetail.title,
+								sessionDuration,
+								unitOfTime: common.UNIT_OF_TIME,
+								startDate,
+								startTime,
+								reason,
+							}),
+						},
+					})
+				)
+		)
+		console.log(`Notified ${attendeeDetails.length} attendee(s) about cancellation of session ${sessionDetail.id}`)
 	}
 
 	/**
