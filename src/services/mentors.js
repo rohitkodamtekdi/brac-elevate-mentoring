@@ -1894,11 +1894,13 @@ module.exports = class MentorsHelper {
 	 * @param {String} userId - Logged in user id.
 	 * @param {String} tenantCode - Tenant code.
 	 * @param {String} orgCode - Organization code of the logged in user.
-	 * @param {String} reason - Reason for cancellation.
+	 * @param {Object} bodyData - Request body.
+	 * @param {String} bodyData.reason - Reason for cancellation.
 	 * @returns {JSON} - Cancel session response.
 	 */
-	static async cancel(sessionId, userId, tenantCode, orgCode, reason) {
+	static async cancel(sessionId, userId, tenantCode, orgCode, bodyData) {
 		try {
+			const { reason } = bodyData
 			const sessionDetail = await sessionQueries.findById(sessionId, tenantCode)
 			if (!sessionDetail) {
 				return responses.failureResponse({

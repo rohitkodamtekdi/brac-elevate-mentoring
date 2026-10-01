@@ -191,7 +191,7 @@ module.exports = class Mentors {
 				req.decodedToken.id,
 				req.decodedToken.tenant_code,
 				req.decodedToken.organization_code,
-				req.body.reason
+				req.body
 			)
 		} catch (error) {
 			return error
