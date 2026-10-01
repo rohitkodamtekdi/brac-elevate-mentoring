@@ -94,6 +94,32 @@ module.exports = class ResourcessData {
 		}
 	}
 
+	// Same as find(), plus the linked session's title/description/categories (and meta - assets keep their
+	// livelihood category in meta.livelihoods) so lists can show the resource's category and description
+	static async findWithSession(filter, tenantCode) {
+		try {
+			return await Resources.findAll({
+				where: {
+					...filter,
+					deleted_at: null,
+					tenant_code: tenantCode,
+				},
+				include: [
+					{
+						model: Session,
+						as: 'session',
+						attributes: ['id', 'title', 'description', 'categories', 'meta'],
+						required: false,
+					},
+				],
+				raw: true,
+				nest: true,
+			})
+		} catch (error) {
+			return error
+		}
+	}
+
 	static async find(filter, tenantCode, projection = {}) {
 		try {
 			const whereClause = {

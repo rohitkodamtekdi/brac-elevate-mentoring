@@ -73,7 +73,8 @@ module.exports = class SessionsHelper {
 			}
 
 			// Fetch resources for the specified session and type
-			const resources = await resourceQueries.find(filter, tenantCode)
+			const resources = await resourceQueries.findWithSession(filter, tenantCode)
+			if (resources instanceof Error) throw resources
 			console.log('Resources fetched:', resources)
 			return responses.successResponse({
 				statusCode: httpStatusCode.ok,
