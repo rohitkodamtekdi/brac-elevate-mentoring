@@ -239,6 +239,24 @@ exports.expireRequest = async (requestSessionId, tenantCode, requestees = null) 
 	}
 }
 
+exports.updateRequest = async (userId, requestSessionId, meta, tenantCode) => {
+	try {
+		return await requestSession.update(
+			{ meta, updated_by: String(userId) },
+			{
+				where: {
+					status: common.CONNECTIONS_STATUS.REQUESTED,
+					id: requestSessionId,
+					tenant_code: tenantCode,
+				},
+				returning: true,
+			}
+		)
+	} catch (error) {
+		throw error
+	}
+}
+
 exports.findOneRequest = async (requestSessionId, tenantCode) => {
 	try {
 		const sessionRequest = await requestSession.findOne({

@@ -110,6 +110,29 @@ module.exports = {
 			})
 	},
 
+	update: (req) => {
+		req.checkBody('request_session_id')
+			.notEmpty()
+			.withMessage('request_session_id is required')
+			.isString()
+			.withMessage('request_session_id must be a string')
+
+		req.checkBody('extra_information')
+			.optional()
+			.isString()
+			.withMessage('extra_information must be a string')
+			.custom((value) => {
+				if (!value.trim()) {
+					throw new Error('extra_information cannot be empty')
+				}
+				const wordCount = value.trim().split(/\s+/).length
+				if (wordCount > 300) {
+					throw new Error('extra_information must be 300 words or fewer')
+				}
+				return true
+			})
+	},
+
 	userAvailability: (req) => {
 		req.checkQuery('status')
 			.optional()

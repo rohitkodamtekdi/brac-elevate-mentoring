@@ -102,6 +102,24 @@ module.exports = class requestsSessions {
 	}
 
 	/**
+	 * Update a pending session request's entity type fields (stored in meta).
+	 * @param {Object} req.body - { request_session_id, ...entityTypeFields }
+	 * @returns {Promise<Object>} A success response with the updated meta.
+	 */
+	async update(req) {
+		try {
+			return await requestSessionsService.update(
+				req.body,
+				req.decodedToken.id,
+				req.decodedToken.organization_code,
+				req.decodedToken.tenant_code
+			)
+		} catch (error) {
+			throw error
+		}
+	}
+
+	/**
 	 * get details of session request.
 	 * @param {Object} bodyData - The body data containing the target user ID.
 	 * @param {string} bodyData.request_session_id - The ID of the target user.
