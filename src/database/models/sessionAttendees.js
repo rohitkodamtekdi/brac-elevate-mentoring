@@ -42,7 +42,7 @@ module.exports = (sequelize, DataTypes) => {
 				allowNull: true,
 				defaultValue: 'ENROLLED',
 			},
-			enrolled_by_me: {
+			enrolled_by: {
 				type: DataTypes.STRING,
 				allowNull: true,
 			},

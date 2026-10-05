@@ -7,9 +7,9 @@ const { Parser } = require('@json2csv/plainjs')
 exports.getEnrolledMentees = async (sessionId, queryParams, tenantCode, enrolledBy = null) => {
 	try {
 		const filter = { session_id: sessionId }
-		// Restrict to mentees enrolled by a specific user (enrolled_by_me column)
+		// Restrict to mentees enrolled by a specific user (enrolled_by column)
 		if (enrolledBy) {
-			filter.enrolled_by_me = String(enrolledBy)
+			filter.enrolled_by = String(enrolledBy)
 		}
 		const mentees = await sessionAttendeesQueries.findAll(filter, tenantCode)
 

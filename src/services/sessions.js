@@ -2212,7 +2212,7 @@ module.exports = class SessionsHelper {
 				mentee_id: userId,
 				time_zone: timeZone,
 				type: enrollmentType,
-				enrolled_by_me: enrolledBy ?? (isSelfEnrolled ? userId : null),
+				enrolled_by: enrolledBy ?? (isSelfEnrolled ? userId : null),
 			}
 			// Optimized: Use findOrCreate to handle enrollment atomically
 			const enrollmentResult = await sessionAttendeesQueries.findOrCreateAttendee(attendee, tenantCode)
