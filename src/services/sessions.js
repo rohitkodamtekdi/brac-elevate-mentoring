@@ -3452,7 +3452,7 @@ module.exports = class SessionsHelper {
 	 * @name enrolledMentees
 	 * @param {string} sessionId - ID of the session.
 	 * @param {Object} queryParams - Query parameters.
-	 * @param {string} [queryParams.enrolled_by_me] - '1' to return only mentees enrolled by the logged in user.
+	 * @param {string} [queryParams.enrolled_by] - '1' to return only mentees enrolled by the logged in user.
 	 * @param {string} userID - ID of the user making the request.
 	 * @returns {Promise<Object>} - A promise that resolves with the success response containing details of enrolled mentees.
 	 * @throws {Error} - Throws an error if there's an issue during data retrieval.
@@ -3485,14 +3485,9 @@ module.exports = class SessionsHelper {
 				})
 			}
 
-			// enrolled_by_me=1 -> only mentees enrolled by the logged in user (e.g. the Linkage Champion who assigned them)
-			const enrolledByMe = ['1', 'true'].includes(String(queryParams?.enrolled_by_me))
-			const enrolledMentees = await getEnrolledMentees(
-				sessionId,
-				queryParams,
-				tenantCode,
-				enrolledByMe ? userID : null
-			)
+			// enrolled_by=1 -> only mentees enrolled by the logged in user (e.g. the Linkage Champion who assigned them)
+			const enrolledBy = ['1', 'true'].includes(String(queryParams?.enrolled_by)) ? userID : null
+			const enrolledMentees = await getEnrolledMentees(sessionId, queryParams, tenantCode, enrolledBy)
 
 			if (queryParams?.csv === 'true') {
 				const timestamp = moment().format('YYYY-MM-DD_HH-mm-ss')
