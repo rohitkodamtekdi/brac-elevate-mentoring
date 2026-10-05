@@ -4,9 +4,14 @@ const userRequests = require('@requests/user')
 const entityTypeService = require('@services/entity-type')
 const { Parser } = require('@json2csv/plainjs')
 
-exports.getEnrolledMentees = async (sessionId, queryParams, tenantCode) => {
+exports.getEnrolledMentees = async (sessionId, queryParams, tenantCode, enrolledBy = null) => {
 	try {
-		const mentees = await sessionAttendeesQueries.findAll({ session_id: sessionId }, tenantCode)
+		const filter = { session_id: sessionId }
+		// Restrict to mentees enrolled by a specific user (enrolled_by_me column)
+		if (enrolledBy) {
+			filter.enrolled_by_me = String(enrolledBy)
+		}
+		const mentees = await sessionAttendeesQueries.findAll(filter, tenantCode)
 
 		// Early return if no mentees found
 		if (!mentees || mentees.length === 0) {
