@@ -676,60 +676,43 @@ exports.getEnrolledSessions = async (page, limit, search, userId, startDate, end
 
 exports.getAttendedSessions = async (page, limit, search, userId, tenantCode) => {
 	try {
-		// A session counts as attended only when the mentee actually joined it (joined_at is set on join)
-		const whereClause = `
-			sa.mentee_id = :userId
-			AND sa.joined_at IS NOT NULL
-			AND s.deleted_at IS NULL
-			AND sa.deleted_at IS NULL
-			AND sa.tenant_code = :tenantCode
-			${search ? 'AND s.title ILIKE :search' : ''}
-		`
-
-		const query = `
-		SELECT
-			s.*,
-			sa.type AS enrolled_type,
-			sa.joined_at,
-			sa.is_feedback_skipped
-		FROM session_attendees sa
-		INNER JOIN sessions s ON sa.session_id = s.id AND sa.tenant_code = s.tenant_code
-		WHERE ${whereClause}
-		ORDER BY sa.joined_at DESC
-		OFFSET :offset
-		LIMIT :limit
-		`
-
-		const replacements = {
-			userId,
-			search: `%${search}%`,
+		// A session counts as attended only when the mentee actually joined it (joined_at is set on join).
+		// Soft-deleted attendees and sessions are excluded by the models (paranoid).
+		const { rows, count } = await SessionAttendee.findAndCountAll({
+			where: {
+				mentee_id: userId,
+				tenant_code: tenantCode,
+				joined_at: { [Op.ne]: null },
+			},
+			attributes: ['type', 'joined_at', 'is_feedback_skipped'],
+			include: [
+				{
+					model: Session,
+					as: 'session',
+					required: true, // INNER JOIN
+					where: {
+						tenant_code: tenantCode,
+						...(search ? { title: { [Op.iLike]: `%${search}%` } } : {}),
+					},
+					attributes: { exclude: ['mentee_password', 'mentor_password'] },
+				},
+			],
+			order: [['joined_at', 'DESC']],
 			offset: limit * (page - 1),
 			limit,
-			tenantCode,
-		}
-
-		const sessionDetails = await Sequelize.query(query, {
-			replacements,
-			type: QueryTypes.SELECT,
+			distinct: true,
 		})
 
-		const countQuery = `
-		SELECT COUNT(DISTINCT s.id) AS "count"
-		FROM session_attendees sa
-		INNER JOIN sessions s ON sa.session_id = s.id AND sa.tenant_code = s.tenant_code
-		WHERE ${whereClause}
-		`
-		const count = await Sequelize.query(countQuery, {
-			type: QueryTypes.SELECT,
-			replacements: replacements,
-		})
-
-		let rows = []
-		if (sessionDetails.length > 0) {
-			rows = sessionDetails.map(({ mentee_password, mentor_password, ...rest }) => rest)
+		// Flatten to the session row + attendee fields, same shape as getEnrolledSessions
+		return {
+			rows: rows.map((attendee) => ({
+				...attendee.session.get({ plain: true }),
+				enrolled_type: attendee.type,
+				joined_at: attendee.joined_at,
+				is_feedback_skipped: attendee.is_feedback_skipped,
+			})),
+			count,
 		}
-
-		return { rows, count: Number(count[0].count) }
 	} catch (error) {
 		console.error(error)
 		throw error
