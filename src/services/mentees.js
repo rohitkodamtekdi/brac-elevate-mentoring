@@ -900,7 +900,7 @@ module.exports = class MenteesHelper {
 	 * ROLES_WITH_SESSSIONATTENDEEMANGEACCESS (e.g. Linkage Champion / org_admin).
 	 * @method
 	 * @name attendedSessions
-	 * @param {String} participantId - user id whose attended sessions are requested.
+	 * @param {String} [userId] - user id whose attended sessions are requested. Defaults to the logged in user.
 	 * @param {String} loggedInUserId - logged in user id.
 	 * @param {Array} roles - logged in user roles.
 	 * @param {Number} page - page No.
@@ -910,8 +910,10 @@ module.exports = class MenteesHelper {
 	 * @returns {JSON} - List of attended sessions
 	 */
 
-	static async attendedSessions(participantId, loggedInUserId, roles, page, limit, search = '', tenantCode) {
+	static async attendedSessions(userId, loggedInUserId, roles, page, limit, search = '', tenantCode) {
 		try {
+			const participantId = userId || loggedInUserId
+
 			if (String(participantId) !== String(loggedInUserId)) {
 				const allowedRoles = (process.env.ROLES_WITH_SESSSIONATTENDEEMANGEACCESS || '')
 					.split(',')

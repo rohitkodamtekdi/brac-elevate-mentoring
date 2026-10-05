@@ -2085,19 +2085,6 @@
 			]
 		},
 		{
-			"sourceRoute": "/mentoring/v1/mentees/attendedSessions/:id",
-			"type": "GET",
-			"priority": "MUST_HAVE",
-			"inSequence": false,
-			"orchestrated": false,
-			"targetPackages": [
-				{
-					"basePackageName": "mentoring",
-					"packageName": "elevate-mentoring"
-				}
-			]
-		},
-		{
 			"sourceRoute": "/mentoring/v1/mentees/joinSession",
 			"type": "GET",
 			"priority": "MUST_HAVE",
