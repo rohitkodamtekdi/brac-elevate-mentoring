@@ -54,6 +54,35 @@ module.exports = class Mentees {
 	}
 
 	/**
+	 * Attended sessions list of a participant
+	 * @method
+	 * @name attendedSessions
+	 * @param {Object} req - request data.
+	 * @param {String} [req.params.id] - Participant user id. Defaults to the logged in user.
+	 * @param {String} req.decodedToken.id - Logged in user id.
+	 * @param {Number} req.pageNo - page no.
+	 * @param {Number} req.pageSize - page size limit.
+	 * @param {String} req.searchText - search text.
+	 * @returns {JSON} - List of sessions the participant has joined.
+	 */
+
+	async attendedSessions(req) {
+		try {
+			return await menteesService.attendedSessions(
+				req.params.id || req.decodedToken.id,
+				req.decodedToken.id,
+				req.decodedToken.roles,
+				req.pageNo,
+				req.pageSize,
+				req.searchText,
+				req.decodedToken.tenant_code
+			)
+		} catch (error) {
+			return error
+		}
+	}
+
+	/**
 	 * Mentees reports
 	 * @method
 	 * @name reports

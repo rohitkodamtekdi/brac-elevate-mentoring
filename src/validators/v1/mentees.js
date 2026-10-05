@@ -7,6 +7,9 @@
 
 module.exports = {
 	sessions: (req) => {},
+	attendedSessions: (req) => {
+		req.checkParams('id').optional().isNumeric().withMessage('id param is invalid, must be an integer')
+	},
 	homeFeed: (req) => {
 		req.checkQuery('sessionScope')
 			.optional()
