@@ -411,7 +411,10 @@ module.exports = class Sessions {
 				req.headers['timezone'],
 				req.decodedToken.organization_id, // organizationId
 				req.decodedToken.organization_code, // organizationCode
-				req.decodedToken.tenant_code
+				req.decodedToken.tenant_code,
+				null,
+				null,
+				req.decodedToken.id
 			)
 			return sessionDetails
 		} catch (error) {

@@ -392,7 +392,8 @@ module.exports = class SessionsHelper {
 					orgCode,
 					tenantCode,
 					bodyData.mentor_id,
-					data
+					data,
+					loggedInUserId
 				)
 			}
 
@@ -903,7 +904,8 @@ module.exports = class SessionsHelper {
 							orgCode,
 							tenantCode,
 							bodyData.mentor_id ? bodyData.mentor_id : sessionDetail.mentor_id,
-							sessionDetail
+							sessionDetail,
+							userId
 						)
 					}
 
@@ -2027,6 +2029,7 @@ module.exports = class SessionsHelper {
 	 * @param {Boolean} isSelfEnrolled 		- true/false.
 	 * @param {Object} session 				- session details.
 	 * @param {Boolean} isAMentor 			- user is mentor or not.
+	 * @param {String} enrolledBy 			- user id who enrolled the mentee (defaults to the mentee on self enrollment).
 	 * @returns {JSON} 						- Enroll session.
 	 */
 
@@ -2041,7 +2044,8 @@ module.exports = class SessionsHelper {
 		orgCode,
 		tenantCode,
 		roles,
-		email = null
+		email = null,
+		enrolledBy = null
 	) {
 		try {
 			let name
@@ -2208,6 +2212,7 @@ module.exports = class SessionsHelper {
 				mentee_id: userId,
 				time_zone: timeZone,
 				type: enrollmentType,
+				enrolled_by: enrolledBy ?? (isSelfEnrolled ? userId : null),
 			}
 			// Optimized: Use findOrCreate to handle enrollment atomically
 			const enrollmentResult = await sessionAttendeesQueries.findOrCreateAttendee(attendee, tenantCode)
@@ -3447,6 +3452,7 @@ module.exports = class SessionsHelper {
 	 * @name enrolledMentees
 	 * @param {string} sessionId - ID of the session.
 	 * @param {Object} queryParams - Query parameters.
+	 * @param {string} [queryParams.enrolled_by] - '1' to return only mentees enrolled by the logged in user.
 	 * @param {string} userID - ID of the user making the request.
 	 * @returns {Promise<Object>} - A promise that resolves with the success response containing details of enrolled mentees.
 	 * @throws {Error} - Throws an error if there's an issue during data retrieval.
@@ -3479,7 +3485,9 @@ module.exports = class SessionsHelper {
 				})
 			}
 
-			const enrolledMentees = await getEnrolledMentees(sessionId, queryParams, tenantCode)
+			// enrolled_by=1 -> only mentees enrolled by the logged in user (e.g. the Linkage Champion who assigned them)
+			const enrolledBy = ['1', 'true'].includes(String(queryParams?.enrolled_by)) ? userID : null
+			const enrolledMentees = await getEnrolledMentees(sessionId, queryParams, tenantCode, enrolledBy)
 
 			if (queryParams?.csv === 'true') {
 				const timestamp = moment().format('YYYY-MM-DD_HH-mm-ss')
@@ -3514,6 +3522,7 @@ module.exports = class SessionsHelper {
 	 * @param {String} tenantCode				- Tenant code.
 	 * @param {String} mentorId					- Mentor id (optional).
 	 * @param {Object} sessionDetails			- Pre-fetched session details (optional, for optimization).
+	 * @param {String} enrolledBy				- User id who is adding the mentees (e.g. Linkage Champion).
 	 * @returns {JSON} 							- Session details
 	 */
 
@@ -3525,7 +3534,8 @@ module.exports = class SessionsHelper {
 		organizationCode,
 		tenantCode,
 		mentorId = null,
-		sessionDetails = null
+		sessionDetails = null,
+		enrolledBy = null
 	) {
 		try {
 			if (!sessionDetails) {
@@ -3574,7 +3584,8 @@ module.exports = class SessionsHelper {
 					organizationCode,
 					tenantCode,
 					undefined,
-					menteeData.email
+					menteeData.email,
+					enrolledBy
 				)
 					.then((response) => ({
 						id: menteeData.user_id,

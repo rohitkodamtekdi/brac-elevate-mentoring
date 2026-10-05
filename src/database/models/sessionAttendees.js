@@ -42,6 +42,10 @@ module.exports = (sequelize, DataTypes) => {
 				allowNull: true,
 				defaultValue: 'ENROLLED',
 			},
+			enrolled_by: {
+				type: DataTypes.STRING,
+				allowNull: true,
+			},
 			tenant_code: {
 				type: DataTypes.STRING,
 				allowNull: false,
