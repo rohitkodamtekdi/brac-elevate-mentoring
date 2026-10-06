@@ -61,6 +61,7 @@
 	"FEEDBACK_AS_NOT_PASSED": "feedbackAs key is not passed for mentor",
 	"EXCEEDED_MAXIMUM_SESSION_TIME": "सत्र आयोजित नहीं की जा सकती है! सत्र की अवधि 24 घंटे से कम होनी चाहिए।",
 	"BELOW_MINIMUM_SESSION_TIME": "समापन का समय, प्रारंभिक समय से कम से कम 30 मिनट बाद का होना चाहिए।",
+	"SESSION_REQUIRED_FIELDS_MISSING": "सत्र प्रकाशित करने से पहले शीर्षक, विवरण, प्रारंभ तिथि और समाप्ति तिथि भरें।",
 	"PROFILE_FTECHED_SUCCESSFULLY": "Profile fetched successfully.",
 	"UPCOMING_SESSION_FETCHED": "Upcoming session fetched successfully.",
 	"UPDATE_FORM_VERSION": "फॉर्म के संस्करण को अपडेट करें।",

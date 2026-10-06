@@ -106,12 +106,24 @@ module.exports = class SessionsHelper {
 	 * @param {Object} bodyData 			- Session creation data.
 	 * @param {String} loggedInUserId 		- logged in user id.
 	 * @param {Boolean} isAMentor 			- indicates if user is mentor or not
+	 * @param {Boolean} SkipValidation 		- skip required/business validations (e.g. saving a draft).
 	 * @returns {JSON} 						- Create session data.
 	 */
 
-	static async create(bodyData, loggedInUserId, orgId, orgCode, isAMentor, notifyUser, tenantCode) {
+	static async create(
+		bodyData,
+		loggedInUserId,
+		orgId,
+		orgCode,
+		isAMentor,
+		notifyUser,
+		tenantCode,
+		SkipValidation = false
+	) {
 		try {
-			let skipValidation = bodyData.type == common.SESSION_TYPE.PRIVATE ? true : false
+			// SkipValidation (e.g. a draft) skips every required/business validation; they are enforced on publish
+			if (SkipValidation) bodyData = this._sanitizeDraftBody(bodyData)
+			let skipValidation = bodyData.type == common.SESSION_TYPE.PRIVATE || SkipValidation ? true : false
 			// check if session mentor is added in the mentee list
 			if (bodyData?.mentees?.includes(bodyData?.mentor_id)) {
 				return responses.failureResponse({
@@ -123,7 +135,11 @@ module.exports = class SessionsHelper {
 			// If type is passed store it in upper case
 			bodyData.type && (bodyData.type = bodyData.type.toUpperCase())
 			// If session type is private and mentorId is not passed in request body return an error
-			if (bodyData.type == common.SESSION_TYPE.PRIVATE && (!bodyData.mentor_id || bodyData.mentor_id == '')) {
+			if (
+				!SkipValidation &&
+				bodyData.type == common.SESSION_TYPE.PRIVATE &&
+				(!bodyData.mentor_id || bodyData.mentor_id == '')
+			) {
 				return responses.failureResponse({
 					message: 'MENTORS_NOT_FOUND',
 					statusCode: httpStatusCode.bad_request,
@@ -137,7 +153,7 @@ module.exports = class SessionsHelper {
 			const mentorIdToCheck = bodyData.mentor_id || loggedInUserId
 			const isSessionCreatedByManager = !!bodyData.mentor_id
 
-			if (bodyData.type == common.SESSION_TYPE.PRIVATE && menteeIdsToEnroll.length === 0) {
+			if (!SkipValidation && bodyData.type == common.SESSION_TYPE.PRIVATE && menteeIdsToEnroll.length === 0) {
 				return responses.failureResponse({
 					message: 'SELECT_AT_LEAST_ONE_MENTEE',
 					statusCode: httpStatusCode.bad_request,
@@ -210,7 +226,7 @@ module.exports = class SessionsHelper {
 			// ALLOW_SESSION_TIME_OVERLAP=NO enforces this check; any other value (or unset) skips it,
 			// since a mentor profile can represent an organization where multiple people handle
 			// sessions, so overlapping session timings are expected/allowed in that case.
-			if (process.env.ALLOW_SESSION_TIME_OVERLAP === 'NO') {
+			if (!SkipValidation && process.env.ALLOW_SESSION_TIME_OVERLAP === 'NO') {
 				const timeSlot = await this.isTimeSlotAvailable(
 					mentorIdToCheck,
 					bodyData.start_date,
@@ -241,14 +257,14 @@ module.exports = class SessionsHelper {
 			let elapsedMinutes = duration.asMinutes()
 
 			// Based on session duration check recommended conditions
-			if (elapsedMinutes < 30) {
+			if (!SkipValidation && elapsedMinutes < 30) {
 				return responses.failureResponse({
 					message: 'BELOW_MINIMUM_SESSION_TIME',
 					statusCode: httpStatusCode.bad_request,
 					responseCode: 'CLIENT_ERROR',
 				})
 			}
-			if (process.env.ENFORCE_MAXIMUM_SESSION_TIME === 'YES' && elapsedMinutes > 1440) {
+			if (!SkipValidation && process.env.ENFORCE_MAXIMUM_SESSION_TIME === 'YES' && elapsedMinutes > 1440) {
 				return responses.failureResponse({
 					message: 'EXCEEDED_MAXIMUM_SESSION_TIME',
 					statusCode: httpStatusCode.bad_request,
@@ -483,48 +499,15 @@ module.exports = class SessionsHelper {
 				processDbResponse['resources'] = await this.getResourceAccessibleUrl(processDbResponse['resources'])
 			}
 
-			// Set notification schedulers for the session
-			// Deep clone to avoid unintended modifications to the original object.
-			const jobsToCreate = _.cloneDeep(common.jobsToCreate)
-
-			// Calculate delays for notification jobs
-			jobsToCreate[0].delay = await utils.getTimeDifferenceInMilliseconds(bodyData.start_date, 1, 'hour')
-			jobsToCreate[1].delay = await utils.getTimeDifferenceInMilliseconds(bodyData.start_date, 24, 'hour')
-			jobsToCreate[2].delay = await utils.getTimeDifferenceInMilliseconds(bodyData.start_date, 15, 'minutes')
-			jobsToCreate[3].delay = await utils.getTimeDifferenceInMilliseconds(bodyData.end_date, 0, 'minutes')
-
-			// Iterate through the jobs and create scheduler jobs
-			for (let jobIndex = 0; jobIndex < jobsToCreate.length; jobIndex++) {
-				// Append the session ID to the job ID
-
-				jobsToCreate[jobIndex].jobId = jobsToCreate[jobIndex].jobId + data.id
-
-				const reqBody = {
-					job_id: jobsToCreate[jobIndex].jobId,
-					email_template_code: jobsToCreate[jobIndex].emailTemplate,
-					job_creator_org_id: orgId,
-					tenant_code: tenantCode,
-					org_code: orgCode,
-				}
-				// Create the scheduler job with the calculated delay and other parameters
-				console.log('📧 EMAIL DEBUG: Creating scheduler job:', {
-					jobId: jobsToCreate[jobIndex].jobId,
-					delay: jobsToCreate[jobIndex].delay,
-					jobName: jobsToCreate[jobIndex].jobName,
-					emailTemplate: reqBody.email_template_code,
-					endpoint: reqBody.email_template_code
-						? common.notificationEndPoint
-						: common.sessionCompleteEndpoint + data.id,
-				})
-				await schedulerRequest.createSchedulerJob(
-					jobsToCreate[jobIndex].jobId,
-					jobsToCreate[jobIndex].delay,
-					jobsToCreate[jobIndex].jobName,
-					reqBody,
-					reqBody.email_template_code
-						? common.notificationEndPoint
-						: common.sessionCompleteEndpoint + data.id,
-					reqBody.email_template_code ? common.POST_METHOD : common.PATCH_METHOD
+			// A draft saved without dates gets its notification jobs when it is published with dates
+			if (bodyData.start_date && bodyData.end_date) {
+				await this._createSessionNotificationJobs(
+					data.id,
+					bodyData.start_date,
+					bodyData.end_date,
+					orgId,
+					orgCode,
+					tenantCode
 				)
 			}
 
@@ -582,6 +565,65 @@ module.exports = class SessionsHelper {
 	}
 
 	/**
+	 * Creates the reminder and mark-as-completed scheduler jobs for a session.
+	 * @method
+	 * @name _createSessionNotificationJobs
+	 */
+	static async _createSessionNotificationJobs(sessionId, startDate, endDate, orgId, orgCode, tenantCode) {
+		// Deep clone to avoid unintended modifications to the original object.
+		const jobsToCreate = _.cloneDeep(common.jobsToCreate)
+
+		jobsToCreate[0].delay = await utils.getTimeDifferenceInMilliseconds(startDate, 1, 'hour')
+		jobsToCreate[1].delay = await utils.getTimeDifferenceInMilliseconds(startDate, 24, 'hour')
+		jobsToCreate[2].delay = await utils.getTimeDifferenceInMilliseconds(startDate, 15, 'minutes')
+		jobsToCreate[3].delay = await utils.getTimeDifferenceInMilliseconds(endDate, 0, 'minutes')
+
+		for (let jobIndex = 0; jobIndex < jobsToCreate.length; jobIndex++) {
+			jobsToCreate[jobIndex].jobId = jobsToCreate[jobIndex].jobId + sessionId
+
+			const reqBody = {
+				job_id: jobsToCreate[jobIndex].jobId,
+				email_template_code: jobsToCreate[jobIndex].emailTemplate,
+				job_creator_org_id: orgId,
+				tenant_code: tenantCode,
+				org_code: orgCode,
+			}
+			console.log('📧 EMAIL DEBUG: Creating scheduler job:', {
+				jobId: jobsToCreate[jobIndex].jobId,
+				delay: jobsToCreate[jobIndex].delay,
+				jobName: jobsToCreate[jobIndex].jobName,
+				emailTemplate: reqBody.email_template_code,
+				endpoint: reqBody.email_template_code
+					? common.notificationEndPoint
+					: common.sessionCompleteEndpoint + sessionId,
+			})
+			await schedulerRequest.createSchedulerJob(
+				jobsToCreate[jobIndex].jobId,
+				jobsToCreate[jobIndex].delay,
+				jobsToCreate[jobIndex].jobName,
+				reqBody,
+				reqBody.email_template_code ? common.notificationEndPoint : common.sessionCompleteEndpoint + sessionId,
+				reqBody.email_template_code ? common.POST_METHOD : common.PATCH_METHOD
+			)
+		}
+	}
+
+	/**
+	 * Removes empty values from a draft payload so blank form fields are not stored or type-checked.
+	 * @method
+	 * @name _sanitizeDraftBody
+	 */
+	static _sanitizeDraftBody(bodyData) {
+		const isEmpty = (value) => value === undefined || value === null || value === ''
+		const sanitized = {}
+		for (const [key, value] of Object.entries(bodyData)) {
+			if (Array.isArray(value)) sanitized[key] = value.filter((item) => !isEmpty(item))
+			else if (!isEmpty(value)) sanitized[key] = value
+		}
+		return sanitized
+	}
+
+	/**
 	 * Update session.
 	 * @method
 	 * @name update
@@ -589,10 +631,21 @@ module.exports = class SessionsHelper {
 	 * @param {Object} bodyData - Session creation data.
 	 * @param {String} userId - logged in user id.
 	 * @param {String} method - method name.
+	 * @param {Boolean} SkipValidation - skip required/business validations (e.g. saving a draft).
 	 * @returns {JSON} - Update session data.
 	 */
 
-	static async update(sessionId, bodyData, userId, method, orgId, orgCode, notifyUser, tenantCode) {
+	static async update(
+		sessionId,
+		bodyData,
+		userId,
+		method,
+		orgId,
+		orgCode,
+		notifyUser,
+		tenantCode,
+		SkipValidation = false
+	) {
 		let isSessionReschedule = false
 		let isSessionCreatedByManager = false
 		let skipValidation = true
@@ -617,6 +670,35 @@ module.exports = class SessionsHelper {
 			// Normalize fields that may be stored as processed {value, label} objects in cache
 			sessionDetail.status = sessionDetail.status?.value ?? sessionDetail.status
 			sessionDetail.type = sessionDetail.type?.value ?? sessionDetail.type
+
+			const targetStatus =
+				bodyData.status && bodyData.status != common.VALID_STATUS ? bodyData.status : sessionDetail.status
+			if (SkipValidation && method != common.DELETE_METHOD) {
+				// A blank description in a draft edit clears the stored value instead of keeping the old one
+				const isDescriptionCleared = 'description' in bodyData && !bodyData.description
+				bodyData = this._sanitizeDraftBody(bodyData)
+				if (isDescriptionCleared) bodyData.description = null
+			}
+
+			// Publishing a draft needs every field the draft was allowed to leave empty
+			if (
+				method != common.DELETE_METHOD &&
+				sessionDetail.status === common.DRAFT_STATUS &&
+				targetStatus === common.PUBLISHED_STATUS
+			) {
+				const missingFields = ['title', 'description', 'start_date', 'end_date'].filter((field) => {
+					const value = bodyData[field] ?? sessionDetail[field]
+					return value === undefined || value === null || value === ''
+				})
+				if (missingFields.length > 0) {
+					return responses.failureResponse({
+						message: 'SESSION_REQUIRED_FIELDS_MISSING',
+						statusCode: httpStatusCode.bad_request,
+						responseCode: 'CLIENT_ERROR',
+						result: missingFields,
+					})
+				}
+			}
 
 			// let triggerSessionMeetinkAddEmail = false
 			// if (
@@ -720,7 +802,11 @@ module.exports = class SessionsHelper {
 			const startDate = moment.unix(sessionDetail.start_date)
 			let elapsedMinutes = startDate.diff(currentDate, 'minutes')
 
-			if (!isEditingAllowedAtAnyTime && elapsedMinutes < process.env.SESSION_EDIT_WINDOW_MINUTES) {
+			if (
+				!isEditingAllowedAtAnyTime &&
+				sessionDetail.start_date &&
+				elapsedMinutes < process.env.SESSION_EDIT_WINDOW_MINUTES
+			) {
 				return responses.failureResponse({
 					message: {
 						key: 'SESSION_EDIT_WINDOW',
@@ -734,7 +820,7 @@ module.exports = class SessionsHelper {
 			// ALLOW_SESSION_TIME_OVERLAP=NO enforces this check; any other value (or unset) skips it,
 			// since a mentor profile can represent an organization where multiple people handle
 			// sessions, so overlapping session timings are expected/allowed in that case.
-			if (process.env.ALLOW_SESSION_TIME_OVERLAP === 'NO') {
+			if (!SkipValidation && process.env.ALLOW_SESSION_TIME_OVERLAP === 'NO') {
 				const timeSlot = await this.isTimeSlotAvailable(
 					userId,
 					bodyData.start_date,
@@ -814,7 +900,7 @@ module.exports = class SessionsHelper {
 			let isSessionDataChanged = false
 			let updatedSessionData = {}
 
-			if (method != common.DELETE_METHOD && (bodyData.end_date || bodyData.start_date)) {
+			if (!SkipValidation && method != common.DELETE_METHOD && (bodyData.end_date || bodyData.start_date)) {
 				let duration = moment.duration(moment.unix(bodyData.end_date).diff(moment.unix(bodyData.start_date)))
 				let elapsedMinutes = duration.asMinutes()
 				if (elapsedMinutes < 30) {
@@ -841,7 +927,7 @@ module.exports = class SessionsHelper {
 			let message
 			const sessionRelatedJobIds = common.notificationJobIdPrefixes.map((element) => element + sessionDetail.id)
 			if (method == common.DELETE_METHOD) {
-				if (sessionDetail.status == common.PUBLISHED_STATUS) {
+				if ([common.PUBLISHED_STATUS, common.DRAFT_STATUS].includes(sessionDetail.status)) {
 					await sessionQueries.deleteSession(
 						{
 							id: sessionId,
@@ -1028,8 +1114,24 @@ module.exports = class SessionsHelper {
 					}
 				}
 				// If new start date is passed update session notification jobs
+				// A draft saved without dates has no jobs yet, so they are created once both dates are known
+				const hasExistingJobs = !!(sessionDetail.start_date && sessionDetail.end_date)
+				if (!hasExistingJobs && updatedSessionData.start_date && updatedSessionData.end_date) {
+					await this._createSessionNotificationJobs(
+						sessionId,
+						updatedSessionData.start_date,
+						updatedSessionData.end_date,
+						orgId,
+						orgCode,
+						tenantCode
+					)
+				}
 
-				if (bodyData.start_date && Number(bodyData.start_date) !== Number(sessionDetail.start_date)) {
+				if (
+					hasExistingJobs &&
+					bodyData.start_date &&
+					Number(bodyData.start_date) !== Number(sessionDetail.start_date)
+				) {
 					isSessionReschedule = true
 
 					const updateDelayData = sessionRelatedJobIds.map((jobId) => ({ id: jobId }))
@@ -1056,7 +1158,11 @@ module.exports = class SessionsHelper {
 						await schedulerRequest.updateDelayOfScheduledJob(updateDelayData[jobIndex])
 					}
 				}
-				if (bodyData.end_date && Number(bodyData.end_date) !== Number(sessionDetail.end_date)) {
+				if (
+					hasExistingJobs &&
+					bodyData.end_date &&
+					Number(bodyData.end_date) !== Number(sessionDetail.end_date)
+				) {
 					isSessionReschedule = true
 
 					const jobId = common.jobPrefixToMarkSessionAsCompleted + sessionDetail.id

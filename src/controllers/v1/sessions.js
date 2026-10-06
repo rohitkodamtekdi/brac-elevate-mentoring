@@ -29,6 +29,8 @@ module.exports = class Sessions {
 		try {
 			// check if notifyUser is true or false. By default true
 			const notifyUser = req.query.notifyUser ? req.query.notifyUser.toLowerCase() === 'true' : true
+			// SkipValidation=true (e.g. saving a draft) skips the required/business validations
+			const SkipValidation = req.query.SkipValidation ? req.query.SkipValidation.toLowerCase() === 'true' : false
 			if (req.params.id) {
 				if (req.headers.timezone) {
 					req.body['time_zone'] = req.headers.timezone
@@ -42,7 +44,8 @@ module.exports = class Sessions {
 					req.decodedToken.organization_id,
 					req.decodedToken.organization_code,
 					notifyUser,
-					req.decodedToken.tenant_code
+					req.decodedToken.tenant_code,
+					SkipValidation
 				)
 
 				return sessionUpdated
@@ -58,7 +61,8 @@ module.exports = class Sessions {
 					req.decodedToken.organization_code,
 					isAMentor(req.decodedToken.roles),
 					notifyUser,
-					req.decodedToken.tenant_code
+					req.decodedToken.tenant_code,
+					SkipValidation
 				)
 
 				return sessionCreated

@@ -61,6 +61,7 @@
 	"FEEDBACK_AS_NOT_PASSED": "feedbackAs key is not passed for mentor",
 	"EXCEEDED_MAXIMUM_SESSION_TIME": "Session should start and end on same day",
 	"BELOW_MINIMUM_SESSION_TIME": "End time should be atleast 30 minutes after start time.",
+	"SESSION_REQUIRED_FIELDS_MISSING": "Please fill title, description, start date and end date before publishing the session.",
 	"PROFILE_FTECHED_SUCCESSFULLY": "Profile fetched successfully.",
 	"UPCOMING_SESSION_FETCHED": "Upcoming session fetched successfully.",
 	"UPDATE_FORM_VERSION": "Update form version.",

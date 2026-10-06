@@ -11,6 +11,10 @@ module.exports = {
 	update: (req) => {
 		req.body = filterRequestBody(req.body, sessions.update)
 
+		// SkipValidation=true (e.g. saving a draft) only needs a title; the remaining required fields are enforced on publish
+		const SkipValidation = String(req.query.SkipValidation).toLowerCase() === 'true'
+		const skipOptional = (chain) => (SkipValidation ? chain.optional({ checkFalsy: true }) : chain)
+
 		if (!req.params.id) {
 			req.checkBody('title')
 				.trim()
@@ -21,7 +25,7 @@ module.exports = {
 				.matches(/^[a-zA-Z0-9\-.,\s]+$/)
 				.withMessage('invalid title')
 
-			req.checkBody('description')
+			skipOptional(req.checkBody('description'))
 				.trim()
 				.notEmpty()
 				.withMessage('description field is empty')
@@ -45,13 +49,13 @@ module.exports = {
 				.matches(/^[a-zA-Z]+\/[a-zA-Z_]+$/)
 				.withMessage('invalid time_zone ')
 
-			req.checkBody('start_date')
+			skipOptional(req.checkBody('start_date'))
 				.notEmpty()
 				.withMessage('start_date field is required')
 				.isInt()
 				.withMessage('start_date must be an integer')
 
-			req.checkBody('end_date')
+			skipOptional(req.checkBody('end_date'))
 				.notEmpty()
 				.withMessage('end_date field is empty')
 				.isInt()
@@ -75,7 +79,7 @@ module.exports = {
 				.withMessage('invalid title')
 
 			req.checkBody('description')
-				.optional()
+				.optional({ checkFalsy: SkipValidation })
 				.trim()
 				.notEmpty()
 				.withMessage('description field is empty')
@@ -105,14 +109,14 @@ module.exports = {
 				.withMessage('invalid time_zone ')
 
 			req.checkBody('start_date')
-				.optional()
+				.optional({ checkFalsy: SkipValidation })
 				.notEmpty()
 				.withMessage('start_date field is required')
 				.isInt()
 				.withMessage('start_date must be an integer')
 
 			req.checkBody('end_date')
-				.optional()
+				.optional({ checkFalsy: SkipValidation })
 				.notEmpty()
 				.withMessage('end_date field is empty')
 				.isInt()

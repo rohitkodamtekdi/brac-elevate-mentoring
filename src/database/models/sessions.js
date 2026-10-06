@@ -14,7 +14,7 @@ module.exports = (sequelize, DataTypes) => {
 			},
 			description: {
 				type: DataTypes.TEXT,
-				allowNull: false,
+				allowNull: true,
 			},
 			recommended_for: {
 				type: DataTypes.ARRAY(DataTypes.STRING),
@@ -53,11 +53,11 @@ module.exports = (sequelize, DataTypes) => {
 			},
 			start_date: {
 				type: DataTypes.BIGINT,
-				allowNull: false,
+				allowNull: true,
 			},
 			end_date: {
 				type: DataTypes.BIGINT,
-				allowNull: false,
+				allowNull: true,
 			},
 			mentee_password: {
 				type: DataTypes.STRING,
