@@ -895,14 +895,11 @@ module.exports = class MenteesHelper {
 	}
 
 	/**
-	 * Attended sessions list. Only sessions the participant actually joined (joined_at is set).
-	 * A user can always see their own list; another participant's list needs a role from
-	 * ROLES_WITH_SESSSIONATTENDEEMANGEACCESS (e.g. Linkage Champion / org_admin).
+	 * Attended sessions list. Only sessions the mentee actually joined (joined_at is set).
 	 * @method
 	 * @name attendedSessions
 	 * @param {String} [userId] - user id whose attended sessions are requested. Defaults to the logged in user.
 	 * @param {String} loggedInUserId - logged in user id.
-	 * @param {Array} roles - logged in user roles.
 	 * @param {Number} page - page No.
 	 * @param {Number} limit - page limit.
 	 * @param {String} search - search field.
@@ -910,32 +907,14 @@ module.exports = class MenteesHelper {
 	 * @returns {JSON} - List of attended sessions
 	 */
 
-	static async attendedSessions(userId, loggedInUserId, roles, page, limit, search = '', tenantCode) {
+	static async attendedSessions(userId, loggedInUserId, page, limit, search = '', tenantCode) {
 		try {
-			const participantId = userId || loggedInUserId
+			const menteeId = userId || loggedInUserId
 
-			if (String(participantId) !== String(loggedInUserId)) {
-				const allowedRoles = (process.env.ROLES_WITH_SESSSIONATTENDEEMANGEACCESS || '')
-					.split(',')
-					.map((role) => role.trim())
-					.filter(Boolean)
-				const hasAccess = (Array.isArray(roles) ? roles : []).some((role) => allowedRoles.includes(role.title))
-				if (!hasAccess) {
-					return responses.failureResponse({
-						message: 'INVALID_PERMISSION',
-						statusCode: httpStatusCode.forbidden,
-						responseCode: 'CLIENT_ERROR',
-					})
-				}
-
-				// Participant must belong to the same tenant as the logged in user
-				const participant = await menteeQueries.getMenteeExtension(
-					participantId,
-					['user_id'],
-					false,
-					tenantCode
-				)
-				if (!participant) {
+			if (String(menteeId) !== String(loggedInUserId)) {
+				// Mentee must belong to the same tenant as the logged in user
+				const menteeExtension = await menteeQueries.getMenteeExtension(menteeId, ['user_id'], false, tenantCode)
+				if (!menteeExtension) {
 					return responses.failureResponse({
 						message: 'USER_NOT_FOUND',
 						statusCode: httpStatusCode.bad_request,
@@ -944,13 +923,7 @@ module.exports = class MenteesHelper {
 				}
 			}
 
-			const sessionDetails = await sessionQueries.getAttendedSessions(
-				page,
-				limit,
-				search,
-				participantId,
-				tenantCode
-			)
+			const sessionDetails = await sessionQueries.getAttendedSessions(page, limit, search, menteeId, tenantCode)
 
 			if (sessionDetails.count > 0) {
 				const uniqueOrgIds = [...new Set(sessionDetails.rows.map((obj) => obj.mentor_organization_id))]

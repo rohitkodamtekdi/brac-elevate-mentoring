@@ -54,16 +54,16 @@ module.exports = class Mentees {
 	}
 
 	/**
-	 * Attended sessions list of a participant
+	 * Attended sessions list of a mentee
 	 * @method
 	 * @name attendedSessions
 	 * @param {Object} req - request data.
-	 * @param {String} [req.query.userId] - Participant user id. Defaults to the logged in user.
+	 * @param {String} [req.query.userId] - Mentee user id. Defaults to the logged in user.
 	 * @param {String} req.decodedToken.id - Logged in user id.
 	 * @param {Number} req.pageNo - page no.
 	 * @param {Number} req.pageSize - page size limit.
 	 * @param {String} req.searchText - search text.
-	 * @returns {JSON} - List of sessions the participant has joined.
+	 * @returns {JSON} - List of sessions the mentee has joined.
 	 */
 
 	async attendedSessions(req) {
@@ -71,7 +71,6 @@ module.exports = class Mentees {
 			return await menteesService.attendedSessions(
 				req.query.userId,
 				req.decodedToken.id,
-				req.decodedToken.roles,
 				req.pageNo,
 				req.pageSize,
 				req.searchText,
