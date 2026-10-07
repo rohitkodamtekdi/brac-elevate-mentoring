@@ -2815,7 +2815,7 @@ module.exports = class SessionsHelper {
 	 * @returns {JSON} - updated session data.
 	 */
 
-	static async completed(sessionId, isBBB, tenantCode, orgCode) {
+	static async completed(sessionId, isBBB, tenantCode, orgCode, attendedMenteeIds) {
 		try {
 			let isSessionCached = false
 			let sessionDetails = await cacheHelper.sessions.get(tenantCode, sessionId)
@@ -2831,6 +2831,11 @@ module.exports = class SessionsHelper {
 					statusCode: httpStatusCode.bad_request,
 					responseCode: 'CLIENT_ERROR',
 				})
+			}
+
+			// Attendance confirmed by the provider; scheduler/BBB callbacks send no mentees and skip this
+			if (Array.isArray(attendedMenteeIds)) {
+				await this._saveSessionAttendance(sessionId, attendedMenteeIds, tenantCode)
 			}
 
 			let resourceInfo
@@ -2977,6 +2982,34 @@ module.exports = class SessionsHelper {
 		} catch (error) {
 			throw error
 		}
+	}
+
+	/**
+	 * Marks the given mentees as attended (joined_at) and clears attendance for the other enrolled mentees.
+	 * @method
+	 * @name _saveSessionAttendance
+	 */
+	static async _saveSessionAttendance(sessionId, attendedMenteeIds, tenantCode) {
+		const menteeIds = attendedMenteeIds.map(String)
+
+		if (menteeIds.length > 0) {
+			const presentResult = await sessionAttendeesQueries.updateOne(
+				{ session_id: sessionId, mentee_id: { [Op.in]: menteeIds }, joined_at: null },
+				{ joined_at: utils.utcFormat() },
+				tenantCode
+			)
+			if (presentResult instanceof Error) throw presentResult
+		}
+
+		const absentResult = await sessionAttendeesQueries.updateOne(
+			{
+				session_id: sessionId,
+				...(menteeIds.length > 0 ? { mentee_id: { [Op.notIn]: menteeIds } } : {}),
+			},
+			{ joined_at: null },
+			tenantCode
+		)
+		if (absentResult instanceof Error) throw absentResult
 	}
 
 	/**

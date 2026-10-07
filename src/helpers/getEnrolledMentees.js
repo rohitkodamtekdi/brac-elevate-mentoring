@@ -33,11 +33,13 @@ exports.getEnrolledMentees = async (sessionId, queryParams, tenantCode, enrolled
 		}
 
 		let menteeTypeMap = {}
+		const attendedMenteeIds = new Set()
 		const menteeIds = []
 		mentees.forEach((mentee) => {
 			menteeIds.push(mentee.mentee_id)
 			const isDeleted = Boolean(mentee.deleted_at ?? mentee.deletedAt)
 			menteeTypeMap[mentee.mentee_id] = isDeleted ? '' : mentee.type
+			if (mentee.joined_at) attendedMenteeIds.add(String(mentee.mentee_id))
 		})
 
 		// Fetch missing user details from DB if any
@@ -88,6 +90,10 @@ exports.getEnrolledMentees = async (sessionId, queryParams, tenantCode, enrolled
 		if (processedUsers && !processedUsers.responseCode) {
 			enrolledUsers = processedUsers
 		}
+
+		enrolledUsers.forEach((user) => {
+			user.is_attended = attendedMenteeIds.has(String(user.user_id))
+		})
 
 		if (queryParams?.csv === 'true') {
 			const csv = parser.parse(
