@@ -27,6 +27,7 @@ const defaultSearchConfig = require('@configs/search.json')
 const emailEncryption = require('@utils/emailEncryption')
 const { defaultRulesFilter, validateDefaultRulesFilter } = require('@helpers/defaultRules')
 const connectionQueries = require('@database/queries/connection')
+const sessionRequestQueries = require('@database/queries/requestSessions')
 const communicationHelper = require('@helpers/communications')
 const searchConfig = require('@root/config.json')
 const cacheHelper = require('@generics/cacheHelper')
@@ -236,13 +237,93 @@ module.exports = class MentorsHelper {
 	 * @returns {JSON} - Mentors reports
 	 */
 
-	static async reports(userId, filterType, roles, tenantCode) {
+	static async reports(userId, filterType, roles, tenantCode, scope) {
 		try {
 			if (!utils.isAMentor(roles)) {
 				return responses.failureResponse({
 					statusCode: httpStatusCode.bad_request,
 					message: 'MENTORS_NOT_FOUND',
 					responseCode: 'CLIENT_ERROR',
+				})
+			}
+
+			// Dashboard scope numbers of the Support Provider (needed, committed, approved, delivered)
+			if (scope) {
+				const [needed, userExtension, approvedRows, deliveredRows, assetRequests, publishedAssets] =
+					await Promise.all([
+						sessionRequestQueries.getOpenRequestsCount(tenantCode),
+						menteeQueries.getMenteeExtension(userId, ['meta'], false, tenantCode),
+						sessionRequestQueries.getAcceptedRequestsSeatsCount(userId, tenantCode),
+						sessionRequestQueries.getAcceptedRequestsDeliveredCount(userId, tenantCode),
+						sessionRequestQueries.getAssetRequestsValues(userId, tenantCode),
+						sessionQueries.getPublishedAssetsValue(userId, tenantCode),
+					])
+
+				// Total Asset Pool = Published Assets Value - (Delivered + Approved + Pending Requests Value)
+				// TODO: Delivered value is kept out of the pool for now, uncomment once finalised
+				const assets = {
+					...assetRequests,
+					published: publishedAssets,
+					pool: publishedAssets.value - (assetRequests.approved.value + assetRequests.pending.value),
+					// pool:
+					// 	publishedAssets.value -
+					// 	(assetRequests.delivered.value + assetRequests.approved.value + assetRequests.pending.value),
+				}
+
+				// Commitments are entity types of UserExtension, stored in meta as entered on the profile
+				const meta = userExtension?.meta || {}
+				const toNumber = (value) => (Number.isFinite(Number(value)) ? Number(value) : 0)
+				const sessionsCommitted = toNumber(meta.sessions_committed)
+				const servicesCommitted = toNumber(meta.services_committed)
+				const assetsCommitted = toNumber(meta.assets_committed)
+				const sum = (counts) => Object.values(counts).reduce((total, count) => total + count, 0)
+				const approved = sessionRequestQueries.countsByCategory(approvedRows)
+				const delivered = sessionRequestQueries.countsByCategory(deliveredRows)
+
+				// Delivered per province, for every province the SP has accepted requests in
+				const provinces = {}
+				approvedRows.forEach((row) => {
+					if (row.province_id) provinces[row.province_id] = { delivered: 0 }
+				})
+				deliveredRows.forEach((row) => {
+					if (!row.province_id) return
+					provinces[row.province_id] = provinces[row.province_id] || { delivered: 0 }
+					provinces[row.province_id].delivered += row.count
+				})
+
+				// Committed of each support category comes from its own commitment entity type
+				const committedByCategory = {
+					training: sessionsCommitted,
+					additional_service: servicesCommitted,
+					asset: assetsCommitted,
+				}
+				const categories = Object.keys(committedByCategory).reduce((acc, category) => {
+					acc[category] = {
+						needed: needed[category],
+						committed: committedByCategory[category],
+						approved: approved[category],
+						delivered: delivered[category],
+					}
+					return acc
+				}, {})
+
+				return responses.successResponse({
+					statusCode: httpStatusCode.ok,
+					message: 'DASHBOARD_SCOPE_FETCHED_SUCCESSFULLY',
+					result: {
+						needed: sum(needed),
+						committed: sessionsCommitted + servicesCommitted,
+						approved: sum(approved),
+						delivered: sum(delivered),
+						commitments: {
+							sessions_committed: sessionsCommitted,
+							services_committed: servicesCommitted,
+							assets_committed: assetsCommitted,
+						},
+						categories,
+						provinces,
+						assets,
+					},
 				})
 			}
 

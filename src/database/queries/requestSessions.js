@@ -389,3 +389,161 @@ exports.getCount = async (userId, status, tenantCode) => {
 		throw error
 	}
 }
+
+// Support category of a request (meta.support_offering_type); older requests without it are trainings
+const REQUEST_CATEGORY_SQL = `CASE
+	WHEN sr.meta::jsonb ->> 'support_offering_type' IN ('additional_service', 'asset')
+		THEN sr.meta::jsonb ->> 'support_offering_type'
+	ELSE 'training'
+END`
+
+// Sums [{ category, count }] rows to { training: 0, additional_service: 0, asset: 0 }
+const countsByCategory = (rows) =>
+	rows.reduce(
+		(acc, row) => {
+			acc[row.category] += row.count
+			return acc
+		},
+		{ training: 0, additional_service: 0, asset: 0 }
+	)
+exports.countsByCategory = countsByCategory
+
+// Open session requests per category - no session created yet and status REQUESTED
+exports.getOpenRequestsCount = async (tenantCode) => {
+	try {
+		const query = `
+			SELECT ${REQUEST_CATEGORY_SQL} AS category, COUNT(*)::int AS count
+			FROM session_request sr
+			WHERE sr.tenant_code = :tenantCode
+				AND sr.status = :requestedStatus
+				AND (sr.session_id IS NULL OR sr.session_id = '')
+				AND sr.deleted_at IS NULL
+			GROUP BY 1
+		`
+		const rows = await sequelize.query(query, {
+			type: QueryTypes.SELECT,
+			replacements: { tenantCode, requestedStatus: common.CONNECTIONS_STATUS.REQUESTED },
+		})
+		return countsByCategory(rows)
+	} catch (error) {
+		throw error
+	}
+}
+
+// Province of a request (meta.provinces holds a single province id)
+const REQUEST_PROVINCE_SQL = `sr.meta::jsonb -> 'provinces' ->> 0`
+
+// Seats per category and province of the sessions created from the requests accepted by the user
+// Returns [{ category, province_id, count }]
+exports.getAcceptedRequestsSeatsCount = async (userId, tenantCode) => {
+	try {
+		const query = `
+			SELECT ${REQUEST_CATEGORY_SQL} AS category, ${REQUEST_PROVINCE_SQL} AS province_id,
+				COALESCE(SUM(s.seats_limit), 0)::int AS count
+			FROM session_request sr
+			INNER JOIN sessions s
+				ON s.id::text = sr.session_id
+				AND s.tenant_code = sr.tenant_code
+				AND s.deleted_at IS NULL
+			WHERE sr.tenant_code = :tenantCode
+				AND sr.requestee_id = :userId
+				AND sr.status = :acceptedStatus
+				AND sr.deleted_at IS NULL
+			GROUP BY 1, 2
+		`
+		const rows = await sequelize.query(query, {
+			type: QueryTypes.SELECT,
+			replacements: { userId, tenantCode, acceptedStatus: common.CONNECTIONS_STATUS.ACCEPTED },
+		})
+		return rows
+	} catch (error) {
+		throw error
+	}
+}
+
+// Participants per category and province who joined the completed sessions created from the requests accepted by the user
+// Returns [{ category, province_id, count }]
+exports.getAcceptedRequestsDeliveredCount = async (userId, tenantCode) => {
+	try {
+		const query = `
+			SELECT ${REQUEST_CATEGORY_SQL} AS category, ${REQUEST_PROVINCE_SQL} AS province_id,
+				COUNT(DISTINCT (sa.session_id, sa.mentee_id))::int AS count
+			FROM session_request sr
+			INNER JOIN sessions s
+				ON s.id::text = sr.session_id
+				AND s.tenant_code = sr.tenant_code
+				AND s.status = :completedStatus
+				AND s.deleted_at IS NULL
+			INNER JOIN session_attendees sa
+				ON sa.session_id = s.id
+				AND sa.tenant_code = s.tenant_code
+				AND sa.joined_at IS NOT NULL
+				AND sa.deleted_at IS NULL
+			WHERE sr.tenant_code = :tenantCode
+				AND sr.requestee_id = :userId
+				AND sr.status = :acceptedStatus
+				AND sr.deleted_at IS NULL
+			GROUP BY 1, 2
+		`
+		const rows = await sequelize.query(query, {
+			type: QueryTypes.SELECT,
+			replacements: {
+				userId,
+				tenantCode,
+				acceptedStatus: common.CONNECTIONS_STATUS.ACCEPTED,
+				completedStatus: common.COMPLETED_STATUS,
+			},
+		})
+		return rows
+	} catch (error) {
+		throw error
+	}
+}
+
+// Count and value of asset requests: approved (accepted by the user), delivered (accepted by the user and
+// session completed) and pending (open requests). Value of a request = meta.estimatedValue x meta.quantity
+exports.getAssetRequestsValues = async (userId, tenantCode) => {
+	try {
+		const numeric = (key, fallback) =>
+			`CASE WHEN sr.meta::jsonb ->> '${key}' ~ '^[0-9]+(\\.[0-9]+)?$' THEN (sr.meta::jsonb ->> '${key}')::numeric ELSE ${fallback} END`
+		const requestValue = `${numeric('estimatedValue', 0)} * ${numeric('quantity', 1)}`
+		const approved = `sr.status = :acceptedStatus AND sr.requestee_id = :userId`
+		const delivered = `${approved} AND s.status = :completedStatus`
+		const pending = `sr.status = :requestedStatus AND (sr.session_id IS NULL OR sr.session_id = '')`
+
+		const query = `
+			SELECT
+				COUNT(*) FILTER (WHERE ${approved})::int AS approved_count,
+				COALESCE(SUM(${requestValue}) FILTER (WHERE ${approved}), 0)::float AS approved_value,
+				COUNT(*) FILTER (WHERE ${delivered})::int AS delivered_count,
+				COALESCE(SUM(${requestValue}) FILTER (WHERE ${delivered}), 0)::float AS delivered_value,
+				COUNT(*) FILTER (WHERE ${pending})::int AS pending_count,
+				COALESCE(SUM(${requestValue}) FILTER (WHERE ${pending}), 0)::float AS pending_value
+			FROM session_request sr
+			LEFT JOIN sessions s
+				ON s.id::text = sr.session_id
+				AND s.tenant_code = sr.tenant_code
+				AND s.deleted_at IS NULL
+			WHERE sr.tenant_code = :tenantCode
+				AND sr.meta::jsonb ->> 'support_offering_type' = 'asset'
+				AND sr.deleted_at IS NULL
+		`
+		const [result] = await sequelize.query(query, {
+			type: QueryTypes.SELECT,
+			replacements: {
+				userId,
+				tenantCode,
+				acceptedStatus: common.CONNECTIONS_STATUS.ACCEPTED,
+				requestedStatus: common.CONNECTIONS_STATUS.REQUESTED,
+				completedStatus: common.COMPLETED_STATUS,
+			},
+		})
+		return {
+			approved: { count: result.approved_count, value: result.approved_value },
+			delivered: { count: result.delivered_count, value: result.delivered_value },
+			pending: { count: result.pending_count, value: result.pending_value },
+		}
+	} catch (error) {
+		throw error
+	}
+}

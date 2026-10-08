@@ -1220,3 +1220,34 @@ exports.findAllSessions = async (page, limit, search, filters, tenantCode) => {
 		throw err
 	}
 }
+
+// Count and value of the assets published by the user (asset sessions not created from a session request
+// and not cancelled). Value of an asset = meta.estimated_value x meta.available_quantity
+exports.getPublishedAssetsValue = async (userId, tenantCode) => {
+	try {
+		const numeric = (key, fallback) =>
+			`CASE WHEN s.meta ->> '${key}' ~ '^[0-9]+(\\.[0-9]+)?$' THEN (s.meta ->> '${key}')::numeric ELSE ${fallback} END`
+		const query = `
+			SELECT
+				COUNT(*)::int AS count,
+				COALESCE(SUM(${numeric('estimated_value', 0)} * ${numeric('available_quantity', 1)}), 0)::float AS value
+			FROM sessions s
+			WHERE s.tenant_code = :tenantCode
+				AND s.mentor_id = :userId
+				AND s.meta ->> 'support_offering_type' = 'asset'
+				AND s.status <> :cancelledStatus
+				AND s.deleted_at IS NULL
+				AND NOT EXISTS (
+					SELECT 1 FROM session_request sr
+					WHERE sr.session_id = s.id::text AND sr.tenant_code = s.tenant_code
+				)
+		`
+		const [result] = await Sequelize.query(query, {
+			type: QueryTypes.SELECT,
+			replacements: { userId, tenantCode, cancelledStatus: common.CANCELLED_STATUS },
+		})
+		return { count: result.count, value: result.value }
+	} catch (error) {
+		throw error
+	}
+}

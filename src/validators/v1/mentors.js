@@ -7,6 +7,9 @@
 
 module.exports = {
 	reports: (req) => {
+		// Dashboard scope numbers are not date based, so filterType is not needed for them
+		if (req.query.scope) return
+
 		req.checkQuery('filterType')
 			.notEmpty()
 			.withMessage('filterType query is empty')
