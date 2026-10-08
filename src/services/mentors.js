@@ -237,7 +237,7 @@ module.exports = class MentorsHelper {
 	 * @returns {JSON} - Mentors reports
 	 */
 
-	static async reports(userId, filterType, roles, tenantCode, scope) {
+	static async reports(userId, filterType, roles, tenantCode, scope, filters = {}) {
 		try {
 			if (!utils.isAMentor(roles)) {
 				return responses.failureResponse({
@@ -251,10 +251,10 @@ module.exports = class MentorsHelper {
 			if (scope) {
 				const [needed, userExtension, approvedRows, deliveredRows, assetRequests, publishedAssets] =
 					await Promise.all([
-						sessionRequestQueries.getOpenRequestsCount(tenantCode),
+						sessionRequestQueries.getOpenRequestsCount(tenantCode, filters),
 						menteeQueries.getMenteeExtension(userId, ['meta'], false, tenantCode),
-						sessionRequestQueries.getAcceptedRequestsSeatsCount(userId, tenantCode),
-						sessionRequestQueries.getAcceptedRequestsDeliveredCount(userId, tenantCode),
+						sessionRequestQueries.getAcceptedRequestsSeatsCount(userId, tenantCode, filters),
+						sessionRequestQueries.getAcceptedRequestsDeliveredCount(userId, tenantCode, filters),
 						sessionRequestQueries.getAssetRequestsValues(userId, tenantCode),
 						sessionQueries.getPublishedAssetsValue(userId, tenantCode),
 					])
@@ -297,22 +297,27 @@ module.exports = class MentorsHelper {
 					additional_service: servicesCommitted,
 					asset: assetsCommitted,
 				}
+				// Commitments are not captured per province or site, so committed is null when either filter is applied
+				const isLocationFiltered = Boolean(filters.province || filters.site)
 				const categories = Object.keys(committedByCategory).reduce((acc, category) => {
 					acc[category] = {
 						needed: needed[category],
-						committed: committedByCategory[category],
+						committed: isLocationFiltered ? null : committedByCategory[category],
 						approved: approved[category],
 						delivered: delivered[category],
 					}
 					return acc
 				}, {})
+				let committed = sessionsCommitted + servicesCommitted
+				if (isLocationFiltered) committed = null
+				else if (filters.type) committed = committedByCategory[filters.type] ?? 0
 
 				return responses.successResponse({
 					statusCode: httpStatusCode.ok,
 					message: 'DASHBOARD_SCOPE_FETCHED_SUCCESSFULLY',
 					result: {
 						needed: sum(needed),
-						committed: sessionsCommitted + servicesCommitted,
+						committed,
 						approved: sum(approved),
 						delivered: sum(delivered),
 						commitments: {

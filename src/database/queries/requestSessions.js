@@ -408,9 +408,30 @@ const countsByCategory = (rows) =>
 	)
 exports.countsByCategory = countsByCategory
 
+// Dashboard filters on a request: province and site (meta.provinces / meta.sites arrays) and support category
+// Returns { sql, replacements } - sql is appended to the WHERE clause
+const requestFilters = (filters = {}) => {
+	const conditions = []
+	const replacements = {}
+	if (filters.province) {
+		conditions.push(`sr.meta::jsonb -> 'provinces' @> jsonb_build_array(CAST(:filterProvince AS text))`)
+		replacements.filterProvince = filters.province
+	}
+	if (filters.site) {
+		conditions.push(`sr.meta::jsonb -> 'sites' @> jsonb_build_array(CAST(:filterSite AS text))`)
+		replacements.filterSite = filters.site
+	}
+	if (filters.type) {
+		conditions.push(`${REQUEST_CATEGORY_SQL} = :filterCategory`)
+		replacements.filterCategory = filters.type
+	}
+	return { sql: conditions.map((condition) => `AND ${condition}`).join('\n'), replacements }
+}
+
 // Open session requests per category - no session created yet and status REQUESTED
-exports.getOpenRequestsCount = async (tenantCode) => {
+exports.getOpenRequestsCount = async (tenantCode, filters) => {
 	try {
+		const filter = requestFilters(filters)
 		const query = `
 			SELECT ${REQUEST_CATEGORY_SQL} AS category, COUNT(*)::int AS count
 			FROM session_request sr
@@ -418,11 +439,12 @@ exports.getOpenRequestsCount = async (tenantCode) => {
 				AND sr.status = :requestedStatus
 				AND (sr.session_id IS NULL OR sr.session_id = '')
 				AND sr.deleted_at IS NULL
+				${filter.sql}
 			GROUP BY 1
 		`
 		const rows = await sequelize.query(query, {
 			type: QueryTypes.SELECT,
-			replacements: { tenantCode, requestedStatus: common.CONNECTIONS_STATUS.REQUESTED },
+			replacements: { tenantCode, requestedStatus: common.CONNECTIONS_STATUS.REQUESTED, ...filter.replacements },
 		})
 		return countsByCategory(rows)
 	} catch (error) {
@@ -435,8 +457,9 @@ const REQUEST_PROVINCE_SQL = `sr.meta::jsonb -> 'provinces' ->> 0`
 
 // Seats per category and province of the sessions created from the requests accepted by the user
 // Returns [{ category, province_id, count }]
-exports.getAcceptedRequestsSeatsCount = async (userId, tenantCode) => {
+exports.getAcceptedRequestsSeatsCount = async (userId, tenantCode, filters) => {
 	try {
+		const filter = requestFilters(filters)
 		const query = `
 			SELECT ${REQUEST_CATEGORY_SQL} AS category, ${REQUEST_PROVINCE_SQL} AS province_id,
 				COALESCE(SUM(s.seats_limit), 0)::int AS count
@@ -449,11 +472,17 @@ exports.getAcceptedRequestsSeatsCount = async (userId, tenantCode) => {
 				AND sr.requestee_id = :userId
 				AND sr.status = :acceptedStatus
 				AND sr.deleted_at IS NULL
+				${filter.sql}
 			GROUP BY 1, 2
 		`
 		const rows = await sequelize.query(query, {
 			type: QueryTypes.SELECT,
-			replacements: { userId, tenantCode, acceptedStatus: common.CONNECTIONS_STATUS.ACCEPTED },
+			replacements: {
+				userId,
+				tenantCode,
+				acceptedStatus: common.CONNECTIONS_STATUS.ACCEPTED,
+				...filter.replacements,
+			},
 		})
 		return rows
 	} catch (error) {
@@ -463,8 +492,9 @@ exports.getAcceptedRequestsSeatsCount = async (userId, tenantCode) => {
 
 // Participants per category and province who joined the completed sessions created from the requests accepted by the user
 // Returns [{ category, province_id, count }]
-exports.getAcceptedRequestsDeliveredCount = async (userId, tenantCode) => {
+exports.getAcceptedRequestsDeliveredCount = async (userId, tenantCode, filters) => {
 	try {
+		const filter = requestFilters(filters)
 		const query = `
 			SELECT ${REQUEST_CATEGORY_SQL} AS category, ${REQUEST_PROVINCE_SQL} AS province_id,
 				COUNT(DISTINCT (sa.session_id, sa.mentee_id))::int AS count
@@ -483,6 +513,7 @@ exports.getAcceptedRequestsDeliveredCount = async (userId, tenantCode) => {
 				AND sr.requestee_id = :userId
 				AND sr.status = :acceptedStatus
 				AND sr.deleted_at IS NULL
+				${filter.sql}
 			GROUP BY 1, 2
 		`
 		const rows = await sequelize.query(query, {
@@ -492,6 +523,7 @@ exports.getAcceptedRequestsDeliveredCount = async (userId, tenantCode) => {
 				tenantCode,
 				acceptedStatus: common.CONNECTIONS_STATUS.ACCEPTED,
 				completedStatus: common.COMPLETED_STATUS,
+				...filter.replacements,
 			},
 		})
 		return rows
