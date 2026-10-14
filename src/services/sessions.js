@@ -486,13 +486,18 @@ module.exports = class SessionsHelper {
 
 			// Set notification schedulers for the session
 			// Deep clone to avoid unintended modifications to the original object.
-			const jobsToCreate = _.cloneDeep(common.jobsToCreate)
+			let jobsToCreate = _.cloneDeep(common.jobsToCreate)
 
 			// Calculate delays for notification jobs
 			jobsToCreate[0].delay = await utils.getTimeDifferenceInMilliseconds(bodyData.start_date, 1, 'hour')
 			jobsToCreate[1].delay = await utils.getTimeDifferenceInMilliseconds(bodyData.start_date, 24, 'hour')
 			jobsToCreate[2].delay = await utils.getTimeDifferenceInMilliseconds(bodyData.start_date, 15, 'minutes')
 			jobsToCreate[3].delay = await utils.getTimeDifferenceInMilliseconds(bodyData.end_date, 0, 'minutes')
+
+			// Skip the job that marks the session as completed at its end time when auto completion is disabled
+			if (![true, 'true', '1', 1].includes(process.env.AUTO_MARK_SESSION_COMPLETED_WHEN_EXPIRED)) {
+				jobsToCreate = jobsToCreate.filter((job) => job.jobId !== common.jobPrefixToMarkSessionAsCompleted)
+			}
 
 			// Iterate through the jobs and create scheduler jobs
 			for (let jobIndex = 0; jobIndex < jobsToCreate.length; jobIndex++) {

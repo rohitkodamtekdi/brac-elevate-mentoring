@@ -157,6 +157,11 @@ let enviromentVariables = {
 		optional: true,
 		default: true,
 	},
+	AUTO_MARK_SESSION_COMPLETED_WHEN_EXPIRED: {
+		message: 'Mark a session as completed automatically when its end time passes, true or false',
+		optional: true,
+		default: true,
+	},
 	SUPPORT_EMAIL_ID: {
 		message: 'Required email id of support',
 		optional: process.env.ENABLE_EMAIL_FOR_REPORT_ISSUE === 'true' ? false : true,
