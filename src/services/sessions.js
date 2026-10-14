@@ -492,7 +492,8 @@ module.exports = class SessionsHelper {
 			jobsToCreate[0].delay = await utils.getTimeDifferenceInMilliseconds(bodyData.start_date, 1, 'hour')
 			jobsToCreate[1].delay = await utils.getTimeDifferenceInMilliseconds(bodyData.start_date, 24, 'hour')
 			jobsToCreate[2].delay = await utils.getTimeDifferenceInMilliseconds(bodyData.start_date, 15, 'minutes')
-			jobsToCreate[3].delay = await utils.getTimeDifferenceInMilliseconds(bodyData.end_date, 0, 'minutes')
+			// Auto-complete job disabled, see common.jobsToCreate
+			// jobsToCreate[3].delay = await utils.getTimeDifferenceInMilliseconds(bodyData.end_date, 0, 'minutes')
 
 			// Iterate through the jobs and create scheduler jobs
 			for (let jobIndex = 0; jobIndex < jobsToCreate.length; jobIndex++) {
@@ -1060,11 +1061,12 @@ module.exports = class SessionsHelper {
 				if (bodyData.end_date && Number(bodyData.end_date) !== Number(sessionDetail.end_date)) {
 					isSessionReschedule = true
 
-					const jobId = common.jobPrefixToMarkSessionAsCompleted + sessionDetail.id
-					await schedulerRequest.updateDelayOfScheduledJob({
-						id: jobId,
-						delay: await utils.getTimeDifferenceInMilliseconds(bodyData.end_date, 0, 'minutes'),
-					})
+					// Auto-complete job disabled, see common.jobsToCreate
+					// const jobId = common.jobPrefixToMarkSessionAsCompleted + sessionDetail.id
+					// await schedulerRequest.updateDelayOfScheduledJob({
+					// 	id: jobId,
+					// 	delay: await utils.getTimeDifferenceInMilliseconds(bodyData.end_date, 0, 'minutes'),
+					// })
 				}
 			}
 
