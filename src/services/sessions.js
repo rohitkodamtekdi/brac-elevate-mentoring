@@ -495,7 +495,7 @@ module.exports = class SessionsHelper {
 			jobsToCreate[3].delay = await utils.getTimeDifferenceInMilliseconds(bodyData.end_date, 0, 'minutes')
 
 			// Skip the job that marks the session as completed at its end time when auto completion is disabled
-			if (process.env.AUTO_MARK_SESSION_COMPLETED_WHEN_EXPIRED !== 'true') {
+			if (![true, 'true', '1', 1].includes(process.env.AUTO_MARK_SESSION_COMPLETED_WHEN_EXPIRED)) {
 				jobsToCreate = jobsToCreate.filter((job) => job.jobId !== common.jobPrefixToMarkSessionAsCompleted)
 			}
 
@@ -1065,14 +1065,11 @@ module.exports = class SessionsHelper {
 				if (bodyData.end_date && Number(bodyData.end_date) !== Number(sessionDetail.end_date)) {
 					isSessionReschedule = true
 
-					// The job to mark the session as completed exists only when auto completion is enabled
-					if (process.env.AUTO_MARK_SESSION_COMPLETED_WHEN_EXPIRED === 'true') {
-						const jobId = common.jobPrefixToMarkSessionAsCompleted + sessionDetail.id
-						await schedulerRequest.updateDelayOfScheduledJob({
-							id: jobId,
-							delay: await utils.getTimeDifferenceInMilliseconds(bodyData.end_date, 0, 'minutes'),
-						})
-					}
+					const jobId = common.jobPrefixToMarkSessionAsCompleted + sessionDetail.id
+					await schedulerRequest.updateDelayOfScheduledJob({
+						id: jobId,
+						delay: await utils.getTimeDifferenceInMilliseconds(bodyData.end_date, 0, 'minutes'),
+					})
 				}
 			}
 
