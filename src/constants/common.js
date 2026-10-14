@@ -110,7 +110,6 @@ module.exports = {
 			jobName: 'notificationBeforeFifteenMin',
 			emailTemplate: 'mentee_session_reminder',
 		},
-		// Auto-complete job disabled: a session stays Expired after its end time until attendance is confirmed
 		{
 			jobId: 'job_to_mark_session_as_completed_',
 			jobName: 'job_to_mark_session_as_completed_',
