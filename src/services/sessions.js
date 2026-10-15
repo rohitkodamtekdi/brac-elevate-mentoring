@@ -2323,7 +2323,6 @@ module.exports = class SessionsHelper {
 							sessionDuration: Math.round(elapsedMinutes),
 							sessionPlatform: session.meeting_info.platform,
 							unitOfTime: common.UNIT_OF_TIME,
-							sessionType: session.type,
 						}),
 					},
 				}
