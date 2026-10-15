@@ -24,6 +24,7 @@ exports.getEnrolledMentees = async (sessionId, queryParams, tenantCode, enrolled
 							{ label: 'Organization', value: 'organization' },
 							{ label: 'E-mail ID', value: 'email' },
 							{ label: 'Enrollment Type', value: 'type' },
+							{ label: 'Joined At', value: 'joined_at' },
 						],
 						header: true,
 						includeEmptyRows: true,
@@ -33,11 +34,15 @@ exports.getEnrolledMentees = async (sessionId, queryParams, tenantCode, enrolled
 		}
 
 		let menteeTypeMap = {}
+		const menteePresenceMap = {}
 		const menteeIds = []
 		mentees.forEach((mentee) => {
 			menteeIds.push(mentee.mentee_id)
 			const isDeleted = Boolean(mentee.deleted_at ?? mentee.deletedAt)
 			menteeTypeMap[mentee.mentee_id] = isDeleted ? '' : mentee.type
+			menteePresenceMap[mentee.mentee_id] = {
+				joined_at: mentee.joined_at ?? null,
+			}
 		})
 
 		// Fetch missing user details from DB if any
@@ -48,6 +53,8 @@ exports.getEnrolledMentees = async (sessionId, queryParams, tenantCode, enrolled
 			if (menteeTypeMap.hasOwnProperty(user.user_id)) {
 				user.type = menteeTypeMap[user.user_id]
 			}
+			const attendeeInfo = menteePresenceMap[user.user_id] || {}
+			user.joined_at = attendeeInfo.joined_at ?? null
 		})
 
 		const CSVFields = [
@@ -57,6 +64,7 @@ exports.getEnrolledMentees = async (sessionId, queryParams, tenantCode, enrolled
 			{ label: 'Organization', value: 'organization' },
 			{ label: 'E-mail ID', value: 'email' },
 			{ label: 'Enrollment Type', value: 'type' },
+			{ label: 'Joined At', value: 'joined_at' },
 		]
 		const parser = new Parser({
 			fields: CSVFields,
@@ -100,6 +108,7 @@ exports.getEnrolledMentees = async (sessionId, queryParams, tenantCode, enrolled
 					email: user.email,
 					type: user.type,
 					organization: user.organization?.name || '',
+					joined_at: user.joined_at || '',
 				}))
 			)
 

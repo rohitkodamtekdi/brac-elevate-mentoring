@@ -1587,6 +1587,18 @@ module.exports = class SessionsHelper {
 						delete sessionDetailedResponse.mentees
 					}
 
+					const totalEnrolledCount = await sessionAttendeesQueries.getCount({
+						session_id: sessionDetailedResponse.id,
+						tenant_code: tenantCode,
+					})
+					const presentEnrolledCount = await sessionAttendeesQueries.getCount({
+						session_id: sessionDetailedResponse.id,
+						tenant_code: tenantCode,
+						joined_at: { [Op.ne]: null },
+					})
+					sessionDetailedResponse.enrolled_mentees_count = totalEnrolledCount || 0
+					sessionDetailedResponse.present_mentees_count = presentEnrolledCount || 0
+
 					sessionDetailedResponse['resources'] = await this.getResourceAccessibleUrl(
 						sessionDetailedResponse['resources']
 					)
@@ -1835,6 +1847,18 @@ module.exports = class SessionsHelper {
 				delete processDbResponse.mentees
 			}
 
+			const totalEnrolledCount = await sessionAttendeesQueries.getCount({
+				session_id: processDbResponse.id,
+				tenant_code: tenantCode,
+			})
+			const presentEnrolledCount = await sessionAttendeesQueries.getCount({
+				session_id: processDbResponse.id,
+				tenant_code: tenantCode,
+				joined_at: { [Op.ne]: null },
+			})
+			processDbResponse.enrolled_mentees_count = totalEnrolledCount || 0
+			processDbResponse.present_mentees_count = presentEnrolledCount || 0
+
 			return responses.successResponse({
 				statusCode: httpStatusCode.created,
 				message: 'SESSION_FETCHED_SUCCESSFULLY',
@@ -2012,6 +2036,24 @@ module.exports = class SessionsHelper {
 				  }))
 				: []
 
+			if (allSessions.rows.length) {
+				await Promise.all(
+					allSessions.rows.map(async (session) => {
+						const totalEnrolledCount = await sessionAttendeesQueries.getCount({
+							session_id: session.id,
+							tenant_code: tenantCode,
+						})
+						const presentEnrolledCount = await sessionAttendeesQueries.getCount({
+							session_id: session.id,
+							tenant_code: tenantCode,
+							joined_at: { [Op.ne]: null },
+						})
+						session.enrolled_mentees_count = totalEnrolledCount || 0
+						session.present_mentees_count = presentEnrolledCount || 0
+					})
+				)
+			}
+
 			const result = {
 				data: allSessions.rows,
 				count: allSessions.count,
@@ -2179,6 +2221,7 @@ module.exports = class SessionsHelper {
 
 			// check if the session is accessible to the user
 			let isAccessible = await this.checkIfSessionIsAccessible(session, userId, isAMentor, tenantCode, orgCode)
+			console.log('isAccessible:', isAccessible)
 
 			if (!isAccessible) {
 				return responses.failureResponse({
@@ -2199,7 +2242,6 @@ module.exports = class SessionsHelper {
 					tenantCode
 				)
 			}
-
 			if (sessionAttendeeExist) {
 				return responses.failureResponse({
 					message: 'USER_ALREADY_ENROLLED',
@@ -2247,6 +2289,7 @@ module.exports = class SessionsHelper {
 			let seatsUpdated = false
 			if (session.created_by !== userId) {
 				const seatUpdateResult = await sessionQueries.updateEnrollmentCount(sessionId, false, tenantCode)
+
 				if (!seatUpdateResult) {
 					// Rollback the enrollment if seat update fails
 					await sessionAttendeesQueries.unEnrollFromSession(sessionId, userId, tenantCode)
@@ -4063,7 +4106,7 @@ module.exports = class SessionsHelper {
 			// Get organization details with cache-first approach
 			let orgDetails = null
 			try {
-				// Try cache first using available organizationId and organizationCode
+				// Try cache with default organization context first
 				orgDetails = await cacheHelper.organizations.get(tenantCode, organizationCode, organizationId)
 			} catch (cacheError) {
 				console.warn('Organization cache lookup failed, falling back to database')
