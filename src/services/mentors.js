@@ -1480,12 +1480,13 @@ module.exports = class MentorsHelper {
 
 				// organization codes (unique)
 				if (item.organization_code && !uniqueOrganizations.has(item.organization_code)) {
-					organizationCodes.push(item.organization_code)
+					organizationCodes
+						.push(item.organization_code)
 
-					uniqueOrganizations.set(item.organization_code, {
-						organization_id: item.organization_id,
-						organization_code: item.organization_code,
-					})
+						.uniqueOrganizations.set(item.organization_code, {
+							organization_id: item.organization_id,
+							organization_code: item.organization_code,
+						})
 				}
 			}
 			const organizations = Array.from(uniqueOrganizations.values())
@@ -1554,7 +1555,10 @@ module.exports = class MentorsHelper {
 						delete userDetail.user_id
 						delete userDetail.mentor_visibility
 						delete userDetail.mentee_visibility
+						// meta carries internal ids; only expose provider_name (used by the Support Provider dashboard)
+						const providerName = userDetail.meta?.provider_name
 						delete userDetail.meta
+						if (providerName) userDetail.meta = { provider_name: providerName }
 						return userDetail
 					})
 				)
@@ -1862,6 +1866,24 @@ module.exports = class MentorsHelper {
 				// Normalize org code from enriched organization object for entity type resolution
 				item.organization_code = item.organization?.organization_code || null
 			})
+
+			if (sessionDetails.rows.length) {
+				await Promise.all(
+					sessionDetails.rows.map(async (item) => {
+						const totalEnrolledCount = await sessionAttendeesQueries.getCount({
+							session_id: item.id,
+							tenant_code: tenantCode,
+						})
+						const presentEnrolledCount = await sessionAttendeesQueries.getCount({
+							session_id: item.id,
+							tenant_code: tenantCode,
+							joined_at: { [Op.ne]: null },
+						})
+						item.enrolled_mentees_count = totalEnrolledCount || 0
+						item.present_mentees_count = presentEnrolledCount || 0
+					})
+				)
+			}
 
 			// Extract organization codes for entity processing
 			const uniqueOrgCodes = [...new Set(sessionDetails.rows.map((obj) => obj.organization_code).filter(Boolean))]
