@@ -847,7 +847,7 @@ module.exports = class SessionsHelper {
 			let message
 			const sessionRelatedJobIds = common.notificationJobIdPrefixes.map((element) => element + sessionDetail.id)
 			if (method == common.DELETE_METHOD) {
-				if (sessionDetail.status == common.PUBLISHED_STATUS) {
+				if ([common.PUBLISHED_STATUS, common.DRAFT_STATUS].includes(sessionDetail.status)) {
 					await sessionQueries.deleteSession(
 						{
 							id: sessionId,
