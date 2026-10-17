@@ -707,6 +707,20 @@ module.exports = class SessionsHelper {
 				userId = bodyData.mentor_id
 			}
 
+			// A published session cannot be edited once its start time has passed
+			if (
+				method !== common.DELETE_METHOD &&
+				[common.PUBLISHED_STATUS, common.LIVE_STATUS].includes(sessionDetail.status) &&
+				sessionDetail.start_date &&
+				moment.unix(Number(sessionDetail.start_date)).isSameOrBefore(moment.utc())
+			) {
+				return responses.failureResponse({
+					message: 'SESSION_ALREADY_STARTED',
+					statusCode: httpStatusCode.bad_request,
+					responseCode: 'CLIENT_ERROR',
+				})
+			}
+
 			if (method !== common.DELETE_METHOD && bodyData.mentor_id) {
 				const mentorExtension =
 					(await cacheHelper.mentor.getCacheOnly(tenantCode, bodyData.mentor_id)) ??
@@ -2290,6 +2304,16 @@ module.exports = class SessionsHelper {
 			if (session.created_by !== userId) {
 				const seatUpdateResult = await sessionQueries.updateEnrollmentCount(sessionId, false, tenantCode)
 
+				// No row updated means the last seat was taken by a parallel enrollment
+				if (Array.isArray(seatUpdateResult) && seatUpdateResult[0] === 0) {
+					await sessionAttendeesQueries.unEnrollFromSession(sessionId, userId, tenantCode)
+					return responses.failureResponse({
+						message: 'SESSION_SEAT_FULL',
+						statusCode: httpStatusCode.bad_request,
+						responseCode: 'CLIENT_ERROR',
+					})
+				}
+
 				if (!seatUpdateResult) {
 					// Rollback the enrollment if seat update fails
 					await sessionAttendeesQueries.unEnrollFromSession(sessionId, userId, tenantCode)
@@ -3634,6 +3658,23 @@ module.exports = class SessionsHelper {
 			if (!sessionDetails) {
 				return responses.failureResponse({
 					message: 'SESSION_NOT_FOUND',
+					statusCode: httpStatusCode.bad_request,
+					responseCode: 'CLIENT_ERROR',
+				})
+			}
+
+			// Check seats on the latest DB row, the cached copy can be stale when another user assigns at the same time
+			const latestSession = await sessionQueries.findById(sessionId, tenantCode)
+			if (
+				latestSession &&
+				!(latestSession instanceof Error) &&
+				latestSession.seats_remaining < menteeIds.length
+			) {
+				return responses.failureResponse({
+					message: {
+						key: 'SESSION_SEATS_NOT_AVAILABLE',
+						interpolation: { count: Math.max(0, latestSession.seats_remaining) },
+					},
 					statusCode: httpStatusCode.bad_request,
 					responseCode: 'CLIENT_ERROR',
 				})
