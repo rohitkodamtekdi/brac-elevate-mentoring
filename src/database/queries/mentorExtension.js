@@ -265,7 +265,19 @@ module.exports = class MentorExtensionQueries {
 
 			let saasFilterClause = saasFilter !== '' ? saasFilter : ''
 			const defaultFilterClause = defaultFilter != '' ? 'AND ' + defaultFilter : ''
-			if (excludeUserIds && filter.query.length === 0) {
+			console.log(
+				'saasFilterClause',
+				saasFilterClause,
+				'filterClause',
+				filterClause,
+				'userFilterClause',
+				userFilterClause,
+				'additionalFilter',
+				additionalFilter,
+				'defaultFilterClause',
+				defaultFilterClause
+			)
+			if (excludeUserIds && filter.query.length === 0 && saasFilterClause) {
 				saasFilterClause = saasFilterClause.replace('AND ', '') // Remove "AND" if excludeUserIds is true and filter is empty
 			}
 

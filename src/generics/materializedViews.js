@@ -14,6 +14,7 @@ const logger = elevateLog.init()
 const responses = require('@helpers/responses')
 const httpStatusCode = require('@generics/http-status')
 const userExtensionQueries = require('@database/queries/userExtension')
+const reportViews = require('@generics/reportViews')
 
 let refreshInterval
 
@@ -387,6 +388,9 @@ const triggerViewBuild = async (tenantCode) => {
 			})
 		)
 
+		// Dashboard / history report views are independent of entity types; create if missing
+		await reportViews.createReportViews(sequelize, tenantCode)
+
 		return entityTypesGroupedByModel
 	} catch (err) {
 		console.log(err)
@@ -444,6 +448,16 @@ const refreshMaterializedView = async (modelName, tenantCode) => {
 
 		// If no active refresh queries, proceed with refreshing the materialized view
 		const [result, metadata] = await sequelize.query(`REFRESH MATERIALIZED VIEW CONCURRENTLY ${viewName}`)
+		// Report views are built on sessions / requests / attendees, so they follow the Session refresh
+		if (modelName === 'Session') {
+			try {
+				await reportViews.refreshReportViews(sequelize, tenantCode)
+			} catch (reportErr) {
+				logger.error(
+					`refreshMaterializedView: report views refresh failed for ${tenantCode}: ${reportErr.message}`
+				)
+			}
+		}
 		logger.info(`refreshMaterializedView: Successfully refreshed ${viewName} for tenant ${tenantCode}`)
 		return {
 			success: true,

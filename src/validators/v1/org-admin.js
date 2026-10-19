@@ -126,4 +126,10 @@ module.exports = {
 	uploadSampleCSV: (req) => {
 		req.checkBody('file_path').notEmpty().withMessage('file_path field is empty')
 	},
+	updateMentorExtension: (req) => {
+		req.checkBody('user_id').notEmpty().withMessage('user_id field is empty')
+		;['committed_session', 'committed_service', 'committed_asset'].forEach((field) =>
+			req.checkBody(field).optional().isInt({ min: 0 }).withMessage(`${field} must be a non-negative integer`)
+		)
+	},
 }

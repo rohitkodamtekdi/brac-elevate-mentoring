@@ -16,8 +16,32 @@ const { Op } = require('sequelize')
 const responses = require('@helpers/responses')
 const { getDefaults } = require('@helpers/getDefaultOrgId')
 const cacheHelper = require('@generics/cacheHelper')
+const mentorsService = require('@services/mentors')
 
 module.exports = class OrgAdminService {
+	/**
+	 * Updates a provider's mentor extension on their behalf. Only the commitment fields can be set here.
+	 * @param {Object} body - { user_id, committed_session?, committed_service?, committed_asset? }
+	 */
+	static async updateMentorExtension(data, orgCode, tenantCode) {
+		try {
+			const userId = data.user_id
+			delete data.user_id
+			data = Object.fromEntries(Object.entries(data).filter(([, value]) => value !== undefined))
+			if (Object.keys(data).length === 0) {
+				return responses.failureResponse({
+					message: 'NO_FIELDS_PROVIDED',
+					statusCode: httpStatusCode.bad_request,
+					responseCode: 'CLIENT_ERROR',
+				})
+			}
+			// required lazily to avoid a circular dependency between the services
+			return await mentorsService.updateMentorExtension(data, userId, orgCode, tenantCode)
+		} catch (error) {
+			return error
+		}
+	}
+
 	/**
 	 * @description 					- Change user's role based on the current role.
 	 * @method

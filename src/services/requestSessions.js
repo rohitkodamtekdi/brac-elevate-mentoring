@@ -857,8 +857,20 @@ module.exports = class requestSessionsHelper {
 		try {
 			const requestSessions = await sessionRequestQueries.getRequestSessions(requestSessionId, tenantCode)
 
-			const targetUserId =
-				userId === requestSessions.requestee_id ? requestSessions.requestor_id : requestSessions.requestee_id
+			let targetUserId
+
+			if (
+				requestSessions?.assignment_type &&
+				requestSessions.assignment_type == 'GROUP' &&
+				requestSessions.status === common.CONNECTIONS_STATUS.REQUESTED
+			) {
+				targetUserId = requestSessions.requestor_id
+			} else {
+				targetUserId =
+					userId === requestSessions.requestee_id
+						? requestSessions.requestor_id
+						: requestSessions.requestee_id
+			}
 
 			const [userExtensionsModelName, userDetails] = await Promise.all([
 				userExtensionQueries.getModelName(),
