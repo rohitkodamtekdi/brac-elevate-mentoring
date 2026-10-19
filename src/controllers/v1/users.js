@@ -59,7 +59,8 @@ module.exports = class Users {
 				req.searchText,
 				req.decodedToken.id,
 				req.decodedToken.organization_code,
-				req.decodedToken.tenant_code
+				req.decodedToken.tenant_code,
+				req.query
 			)
 			return listUser
 		} catch (error) {

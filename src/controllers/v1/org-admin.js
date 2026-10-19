@@ -219,4 +219,24 @@ module.exports = class OrgAdmin {
 			return error
 		}
 	}
+
+	/**
+	 * Update a mentor (support provider) extension on behalf of the provider, e.g. to record intervention commitments.
+	 * @method
+	 * @name updateMentorExtension
+	 * @param {String} req.body.user_id - Provider (mentor) user id.
+	 * @param {Number} req.body.committed_session|committed_service|committed_asset - Committed units.
+	 * @returns {JSON} - Updated mentor extension details.
+	 */
+	async updateMentorExtension(req) {
+		try {
+			return await orgAdminService.updateMentorExtension(
+				req.body,
+				req.decodedToken.organization_code,
+				req.decodedToken.tenant_code
+			)
+		} catch (error) {
+			return error
+		}
+	}
 }
