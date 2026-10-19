@@ -233,7 +233,8 @@ module.exports = class OrgAdmin {
 			return await orgAdminService.updateMentorExtension(
 				req.body,
 				req.decodedToken.organization_code,
-				req.decodedToken.tenant_code
+				req.decodedToken.tenant_code,
+				req.decodedToken.organization_id
 			)
 		} catch (error) {
 			return error
