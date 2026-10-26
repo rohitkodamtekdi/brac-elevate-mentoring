@@ -305,6 +305,24 @@ exports.getRequestSessions = async (requestSessionId, tenantCode) => {
 	}
 }
 
+// Requests that created the given sessions (an accepted request stores the new session_id)
+exports.getRequestsBySessionIds = async (sessionIds = [], tenantCode) => {
+	try {
+		if (!sessionIds.length) return []
+		return await requestSession.findAll({
+			where: {
+				// session_id is a varchar column
+				session_id: { [Op.in]: sessionIds.map(String) },
+				tenant_code: tenantCode,
+			},
+			attributes: ['id', 'session_id', 'requestor_id'],
+			raw: true,
+		})
+	} catch (error) {
+		throw error
+	}
+}
+
 exports.markRequestsAsDeleted = async (requestSessionIds = [], tenantCode) => {
 	try {
 		const currentDateTime = moment().format('YYYY-MM-DD HH:mm:ssZ')
