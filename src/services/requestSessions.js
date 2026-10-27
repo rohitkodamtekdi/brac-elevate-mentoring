@@ -198,25 +198,28 @@ module.exports = class requestSessionsHelper {
 				bodyData.requestees
 			)
 
-			// Schedule a job to expire the session request after end_date
-			const jobId = common.expireSessionRequest + SessionRequestResult.id
+			// Schedule a job to expire the session request after end_date; requests without dates
+			// (optional for Asset/Additional Service) never expire, so no job is created for them
+			if (bodyData.end_date) {
+				const jobId = common.expireSessionRequest + SessionRequestResult.id
 
-			const delay = await utils.getTimeDifferenceInMilliseconds(bodyData.end_date, 0, 'minutes')
+				const delay = await utils.getTimeDifferenceInMilliseconds(bodyData.end_date, 0, 'minutes')
 
-			const reqBody = {
-				job_id: jobId,
-				request_session_id: SessionRequestResult.id,
-				tenant_code: tenantCode,
+				const reqBody = {
+					job_id: jobId,
+					request_session_id: SessionRequestResult.id,
+					tenant_code: tenantCode,
+				}
+
+				await schedulerRequest.createSchedulerJob(
+					jobId,
+					delay,
+					'ExpireSessionRequest',
+					reqBody,
+					`${common.expireSessionRequestEndpoint}/${SessionRequestResult.id}`,
+					common.POST_METHOD
+				)
 			}
-
-			const expire = await schedulerRequest.createSchedulerJob(
-				jobId,
-				delay,
-				'ExpireSessionRequest',
-				reqBody,
-				`${common.expireSessionRequestEndpoint}/${SessionRequestResult.id}`,
-				common.POST_METHOD
-			)
 
 			return responses.successResponse({
 				statusCode: httpStatusCode.created,
@@ -859,10 +862,13 @@ module.exports = class requestSessionsHelper {
 
 			let targetUserId
 
+			// A request not yet assigned to a provider (e.g. Expired/Rejected LC requests) has no
+			// requestee, so its details are built from the requestor
 			if (
-				requestSessions?.assignment_type &&
-				requestSessions.assignment_type == 'GROUP' &&
-				requestSessions.status === common.CONNECTIONS_STATUS.REQUESTED
+				(requestSessions && !requestSessions.requestee_id) ||
+				(requestSessions?.assignment_type &&
+					requestSessions.assignment_type == 'GROUP' &&
+					requestSessions.status === common.CONNECTIONS_STATUS.REQUESTED)
 			) {
 				targetUserId = requestSessions.requestor_id
 			} else {
