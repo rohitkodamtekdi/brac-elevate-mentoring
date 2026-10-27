@@ -9,6 +9,7 @@ const { UniqueConstraintError } = require('sequelize')
 const _ = require('lodash')
 const sessionAttendeesQueries = require('@database/queries/sessionAttendees')
 const sessionQueries = require('@database/queries/sessions')
+const sessionRequestQueries = require('@database/queries/requestSessions')
 const schedulerRequest = require('@requests/scheduler')
 const entityTypeQueries = require('@database/queries/entityType')
 const entityTypeCache = require('@helpers/entityTypeCache')
@@ -1883,6 +1884,34 @@ module.exports = class MentorsHelper {
 						item.present_mentees_count = presentEnrolledCount || 0
 					})
 				)
+
+				// Sessions created by accepting an LC request carry who requested them ("Requested by" on SP cards)
+				const sessionRequests = await sessionRequestQueries.getRequestsBySessionIds(
+					sessionDetails.rows.map((item) => item.id),
+					tenantCode
+				)
+				if (sessionRequests.length) {
+					const requestorIds = [...new Set(sessionRequests.map((request) => String(request.requestor_id)))]
+					const requestorDetails = await userRequests.getUserDetailedListUsingCache(requestorIds, tenantCode)
+					const requestorById = {}
+					;(requestorDetails?.result || []).forEach((user) => {
+						requestorById[String(user.user_id)] = user
+					})
+					const requestBySessionId = {}
+					sessionRequests.forEach((request) => {
+						requestBySessionId[String(request.session_id)] = request
+					})
+					sessionDetails.rows.forEach((item) => {
+						const request = requestBySessionId[String(item.id)]
+						if (!request) return
+						const requestor = requestorById[String(request.requestor_id)]
+						item.requested_by = {
+							id: String(request.requestor_id),
+							name: requestor?.name || null,
+							organization: requestor?.organization?.name || null,
+						}
+					})
+				}
 			}
 
 			// Extract organization codes for entity processing
