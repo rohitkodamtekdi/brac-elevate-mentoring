@@ -1104,6 +1104,8 @@ module.exports = class MenteesHelper {
 				if (mentor) {
 					session.mentor_name = mentor.name
 					session.organization = mentor.organization?.name
+					// Support Provider's organisation name shown on LC cards
+					session.provider_name = mentor.meta?.provider_name || mentor.provider_name || null
 				}
 			})
 
