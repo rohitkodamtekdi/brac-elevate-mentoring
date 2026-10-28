@@ -390,10 +390,12 @@ exports.updateEnrollmentCount = async (sessionId, increment = true, tenantCode) 
 			? { seats_remaining: literal('"seats_remaining" + 1') }
 			: { seats_remaining: literal('"seats_remaining" - 1') }
 
+		// Decrement only while a seat is left so parallel enrollments cannot overbook
 		return await Session.update(updateFields, {
 			where: {
 				id: sessionId,
 				tenant_code: tenantCode,
+				...(increment ? {} : { seats_remaining: { [Op.gt]: 0 } }),
 			},
 		})
 	} catch (error) {
