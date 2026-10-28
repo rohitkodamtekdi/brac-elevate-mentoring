@@ -42,6 +42,8 @@ exports.getEnrolledMentees = async (sessionId, queryParams, tenantCode, enrolled
 			menteeTypeMap[mentee.mentee_id] = isDeleted ? '' : mentee.type
 			menteePresenceMap[mentee.mentee_id] = {
 				joined_at: mentee.joined_at ?? null,
+				// Who enrolled the mentee (e.g. the LC), used to group asset requests by coach
+				enrolled_by: mentee.enrolled_by ?? null,
 			}
 		})
 
@@ -55,6 +57,7 @@ exports.getEnrolledMentees = async (sessionId, queryParams, tenantCode, enrolled
 			}
 			const attendeeInfo = menteePresenceMap[user.user_id] || {}
 			user.joined_at = attendeeInfo.joined_at ?? null
+			user.enrolled_by = attendeeInfo.enrolled_by ?? null
 		})
 
 		const CSVFields = [
