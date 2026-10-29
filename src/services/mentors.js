@@ -1749,10 +1749,12 @@ module.exports = class MentorsHelper {
 
 				if (arrayOfStatus.includes(common.COMPLETED_STATUS)) {
 					orConditions.push({ status: common.COMPLETED_STATUS })
-					orConditions.push({
-						status: { [Op.in]: [common.PUBLISHED_STATUS, common.LIVE_STATUS] },
-						end_date: { [Op.lte]: currentDate },
-					})
+					// Sessions whose time is over but were never completed show as Expired in the portal and are
+					// listed by the Expired filter (status=PUBLISHED&endDate=now), so Completed returns only completed ones
+					// orConditions.push({
+					// 	status: { [Op.in]: [common.PUBLISHED_STATUS, common.LIVE_STATUS] },
+					// 	end_date: { [Op.lte]: currentDate },
+					// })
 				}
 
 				// Any other literal statuses (e.g. DRAFT) pass through unchanged,
