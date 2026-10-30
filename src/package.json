@@ -99,5 +99,8 @@
 		"@helpers": "helpers",
 		"@dtos": "dtos",
 		"@utils": "utils"
+	},
+	"engines": {
+		"node": ">=24 <25"
 	}
 }
