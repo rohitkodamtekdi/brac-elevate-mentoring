@@ -536,4 +536,28 @@ module.exports = class Sessions {
 			return error
 		}
 	}
+
+	/**
+	 * Sessions the daily nudges in brac-utility-service look at (internal access only)
+	 * @method
+	 * @name nudgeCandidates
+	 * @param {Object} req - request data.
+	 * @param {String} req.query.tenant_code - Tenant code.
+	 * @returns {JSON} - Sessions not marked completed after their end date, and draft sessions.
+	 */
+	async nudgeCandidates(req) {
+		try {
+			const tenantCode = req.query.tenant_code || req.body?.tenant_code
+			if (!tenantCode) {
+				return responses.failureResponse({
+					message: 'TENANT_CODE_REQUIRED',
+					statusCode: httpStatusCode.bad_request,
+					responseCode: 'CLIENT_ERROR',
+				})
+			}
+			return await sessionService.nudgeCandidates(tenantCode)
+		} catch (error) {
+			return error
+		}
+	}
 }

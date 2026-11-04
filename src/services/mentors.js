@@ -1,4 +1,5 @@
 // Dependencies
+const crypto = require('crypto')
 const utils = require('@generics/utils')
 const userRequests = require('@requests/user')
 const common = require('@constants/common')
@@ -2020,6 +2021,33 @@ module.exports = class MentorsHelper {
 				await this._notifyAttendeesAboutSessionCancellation(sessionDetail, reason, tenantCode, orgCode)
 			} catch (notifyErr) {
 				console.error(`Failed to notify attendees of cancelled session ${sessionDetail.id}:`, notifyErr)
+			}
+
+			// Push to Kafka for brac_utility to tell the LCs who enrolled participants that the Support was closed
+			// (the participants themselves get the cancellation email above)
+			try {
+				const attendees = await sessionAttendeesQueries.findAll({ session_id: sessionDetail.id }, tenantCode, {
+					attributes: ['mentee_id', 'enrolled_by'],
+					raw: true,
+				})
+				if (attendees instanceof Error) throw attendees
+				await kafkaCommunication.pushSessionEnrollmentToKafka({
+					eventId: crypto.randomUUID(),
+					eventType: 'SESSION_CANCELLED',
+					sessionId: String(sessionDetail.id),
+					tenantCode,
+					orgCode,
+					mentorId: sessionDetail.mentor_id,
+					cancelledBy: userId,
+					enrollments: attendees.map((attendee) => ({
+						menteeId: attendee.mentee_id,
+						enrolledBy: attendee.enrolled_by,
+					})),
+					session: { id: sessionDetail.id, title: sessionDetail.title },
+					occurredAt: new Date().toISOString(),
+				})
+			} catch (kafkaErr) {
+				console.error('Failed to push session cancellation to kafka:', kafkaErr)
 			}
 
 			console.log(`Cancelled session ${sessionDetail.id} by user ${userId}`)

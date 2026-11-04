@@ -57,6 +57,7 @@ module.exports = {
 		'/mentoring/v1/users/add',
 		'/mentoring/v1/users/delete',
 		'/requestSessions/expire',
+		'/sessions/nudgeCandidates',
 	],
 	COMPLETED_STATUS: 'COMPLETED',
 	UNFULFILLED_STATUS: 'UNFULFILLED',
@@ -121,6 +122,8 @@ module.exports = {
 		'mentoring_session_fifteen_min_',
 	],
 	jobPrefixToMarkSessionAsCompleted: 'job_to_mark_session_as_completed_',
+	// How far back sessions.nudgeCandidates looks for sessions not marked completed
+	NUDGE_LOOKBACK_DAYS: 45,
 	ORG_ADMIN_ROLE: 'org_admin',
 	expireSessionRequest: 'job_to_mark_session_as_expired',
 	// Default organization policies

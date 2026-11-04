@@ -15,7 +15,7 @@ const menteeExtensionQueries = require('@database/queries/userExtension')
 const postSessionQueries = require('@database/queries/postSessionDetail')
 const entityTypeCache = require('@helpers/entityTypeCache')
 const cacheHelper = require('@generics/cacheHelper')
-const { Op } = require('sequelize')
+const { Op, fn, col } = require('sequelize')
 const notificationQueries = require('@database/queries/notificationTemplate')
 
 const schedulerRequest = require('@requests/scheduler')
@@ -534,6 +534,9 @@ module.exports = class SessionsHelper {
 				)
 			}
 
+			// brac_utility schedules its Support reminders (not completed, draft not submitted, provider inactive)
+			await this._pushSessionScheduledEvent(data, tenantCode, orgCode)
+
 			let emailTemplateCode
 
 			if (bodyData.managerFlow && userDetails.email && notifyUser) {
@@ -1026,6 +1029,9 @@ module.exports = class SessionsHelper {
 				}
 				message = 'SESSION_UPDATED_SUCCESSFULLY'
 				updatedSessionData = updatedRows[0].dataValues
+
+				// brac_utility moves its Support reminders to the new dates / status
+				await this._pushSessionScheduledEvent(updatedSessionData, tenantCode, orgCode)
 
 				// Cache invalidation: Delete old cache - will be set on next read
 				try {
@@ -3054,6 +3060,38 @@ module.exports = class SessionsHelper {
 				// Cache invalidation failure - continue operation
 			}
 
+			// Push to Kafka for brac_utility to send the completion emails (absent participants only when attendance was marked)
+			try {
+				const attendees = await sessionAttendeesQueries.findAll({ session_id: sessionId }, tenantCode, {
+					attributes: ['mentee_id', 'joined_at', 'enrolled_by'],
+					raw: true,
+				})
+				const absentMentees =
+					mentees.length > 0
+						? attendees.filter((attendee) => !attendee.joined_at).map((attendee) => attendee.mentee_id)
+						: []
+				await kafkaCommunication.pushSessionEnrollmentToKafka({
+					eventId: crypto.randomUUID(),
+					eventType: 'SESSION_COMPLETED',
+					sessionId: String(sessionId),
+					tenantCode,
+					orgCode,
+					mentorId: sessionDetails.mentor_id,
+					completedBy: callerId,
+					attendedMentees: mentees,
+					absentMentees,
+					// Who enrolled each participant (the coach), so the coach can be told about their participants
+					enrollments: attendees.map((attendee) => ({
+						menteeId: attendee.mentee_id,
+						enrolledBy: attendee.enrolled_by,
+					})),
+					session: { id: sessionDetails.id, title: sessionDetails.title },
+					occurredAt: new Date().toISOString(),
+				})
+			} catch (kafkaErr) {
+				console.error('Failed to push session completion to kafka:', kafkaErr)
+			}
+
 			if (sessionDetails?.meeting_info?.value == common.BBB_VALUE && isBBB) {
 				const recordingInfo = await bigBlueButtonRequests.getRecordings(sessionId)
 
@@ -3084,6 +3122,81 @@ module.exports = class SessionsHelper {
 			return responses.successResponse({
 				statusCode: httpStatusCode.ok,
 				result: attendance,
+			})
+		} catch (error) {
+			throw error
+		}
+	}
+
+	/**
+	 * Push the session's dates and status to Kafka; brac_utility schedules its reminder jobs from them.
+	 * A failure is only logged: it must not fail creating or updating the session.
+	 * @method
+	 * @name _pushSessionScheduledEvent
+	 * @param {Object} session - created / updated session.
+	 * @param {String} tenantCode - tenant code.
+	 * @param {String} orgCode - organization code.
+	 */
+	static async _pushSessionScheduledEvent(session, tenantCode, orgCode) {
+		try {
+			await kafkaCommunication.pushSessionEnrollmentToKafka({
+				eventId: crypto.randomUUID(),
+				eventType: 'SESSION_SCHEDULED',
+				sessionId: String(session.id),
+				tenantCode,
+				orgCode,
+				mentorId: session.mentor_id,
+				createdBy: session.created_by,
+				status: session.status,
+				session: { id: session.id, title: session.title, end_date: session.end_date },
+				updatedAt: session.updated_at || new Date().toISOString(),
+				occurredAt: new Date().toISOString(),
+			})
+		} catch (kafkaErr) {
+			console.error('Failed to push session schedule to kafka:', kafkaErr)
+		}
+	}
+
+	/**
+	 * Sessions the daily nudges in brac-utility-service look at.
+	 * @method
+	 * @name nudgeCandidates
+	 * @param {String} tenantCode - Tenant code.
+	 * @returns {JSON} - notCompleted: published/live sessions whose end date passed in the last NUDGE_LOOKBACK_DAYS days,
+	 * 					 drafts: draft sessions,
+	 * 					 providerActivity: last session update per Support Provider.
+	 */
+	static async nudgeCandidates(tenantCode) {
+		try {
+			const now = moment().unix()
+			const lookbackFrom = moment().subtract(common.NUDGE_LOOKBACK_DAYS, 'days').unix()
+
+			const notCompleted = await sessionQueries.findAll(
+				{
+					status: [common.PUBLISHED_STATUS, common.LIVE_STATUS],
+					end_date: { [Op.lt]: now, [Op.gte]: lookbackFrom },
+				},
+				tenantCode,
+				{ attributes: ['id', 'title', 'mentor_id', 'end_date'] }
+			)
+			if (notCompleted instanceof Error) throw notCompleted
+
+			const drafts = await sessionQueries.findAll({ status: common.DRAFT_STATUS }, tenantCode, {
+				attributes: ['id', 'title', 'mentor_id', 'created_by', 'updated_at'],
+			})
+			if (drafts instanceof Error) throw drafts
+
+			// Last time each Support Provider created or changed a Support
+			const providerActivity = await sessionQueries.findAll({ mentor_id: { [Op.ne]: null } }, tenantCode, {
+				attributes: ['mentor_id', [fn('MAX', col('updated_at')), 'last_updated_at']],
+				group: ['mentor_id'],
+			})
+			if (providerActivity instanceof Error) throw providerActivity
+
+			return responses.successResponse({
+				statusCode: httpStatusCode.ok,
+				message: 'SESSION_FETCHED_SUCCESSFULLY',
+				result: { notCompleted, drafts, providerActivity },
 			})
 		} catch (error) {
 			throw error
