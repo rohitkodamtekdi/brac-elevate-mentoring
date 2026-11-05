@@ -859,7 +859,8 @@ exports.getUpcomingSessionsFromView = async (
 	saasFilter = '',
 	additionalProjectionclause = '',
 	searchText,
-	defaultFilter = ''
+	defaultFilter = '',
+	dateStatus = ''
 ) => {
 	try {
 		const currentEpochTime = Math.floor(Date.now() / 1000)
@@ -868,6 +869,13 @@ exports.getUpcomingSessionsFromView = async (
 
 		const saasFilterClause = saasFilter != '' ? saasFilter : ''
 		const defaultFilterClause = defaultFilter != '' ? 'AND ' + defaultFilter : ''
+		// Upcoming / In Progress come from the dates (status is PUBLISHED for all), so filter them here to keep the count right
+		const dateStatusClauses = {
+			active: 'AND end_date > :currentEpochTime',
+			upcoming: 'AND start_date > :currentEpochTime',
+			in_progress: 'AND start_date <= :currentEpochTime AND end_date > :currentEpochTime',
+		}
+		const dateStatusClause = Object.hasOwn(dateStatusClauses, dateStatus) ? dateStatusClauses[dateStatus] : ''
 		// No longer need tenant filtering since we use tenant-specific views
 		let publicSessionFilter = " AND type = '" + common.SESSION_TYPE.PUBLIC + "'"
 
@@ -921,6 +929,7 @@ exports.getUpcomingSessionsFromView = async (
 				${saasFilterClause}
 			${filterClause}
 			AND status IN ('${common.PUBLISHED_STATUS}', '${common.LIVE_STATUS}')
+			${dateStatusClause}
 			${publicSessionFilter}
 			${searchFilter.whereClause}
 			${defaultFilterClause}
@@ -963,6 +972,7 @@ exports.getUpcomingSessionsFromView = async (
 				${saasFilterClause}
 			${filterClause}
 			AND status IN ('${common.PUBLISHED_STATUS}', '${common.LIVE_STATUS}')
+			${dateStatusClause}
 			${publicSessionFilter}
 			${searchFilter.whereClause}
 			${defaultFilterClause}

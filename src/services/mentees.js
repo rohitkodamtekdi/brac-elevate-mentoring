@@ -651,6 +651,9 @@ module.exports = class MenteesHelper {
 			additionalProjectionString = queryParams.fields
 			delete queryParams.fields
 		}
+		// date_status is not an entity type, so take it out before the params are turned into filters
+		const dateStatus = queryParams.date_status
+		delete queryParams.date_status
 		let query = utils.processQueryParametersWithExclusions(queryParams)
 		const sessionModelName = await sessionQueries.getModelName()
 
@@ -731,7 +734,8 @@ module.exports = class MenteesHelper {
 			saasFilter,
 			additionalProjectionString,
 			search,
-			defaultRuleFilter
+			defaultRuleFilter,
+			dateStatus
 		)
 		if (sessions && sessions.rows && Array.isArray(sessions.rows) && sessions.rows.length > 0) {
 			const uniqueOrgIds = [...new Set(sessions.rows.map((obj) => obj?.mentor_organization_id).filter(Boolean))]
