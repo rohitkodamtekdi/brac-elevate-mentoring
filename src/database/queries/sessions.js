@@ -725,6 +725,7 @@ exports.getMissedSessions = async (page, limit, search, userId, tenantCode) => {
 				return {
 					...session,
 					delivery_mode: meta?.delivery_mode || null,
+					support_offering_type: meta?.support_offering_type || null,
 					enrolled_type: attendee.type,
 					joined_at: attendee.joined_at,
 					is_feedback_skipped: attendee.is_feedback_skipped,
